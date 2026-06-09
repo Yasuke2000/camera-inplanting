@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Camera-inplanting · kaarttool</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<style>
+  :root{
+    --bg:#11161a;--panel:#161c21;--panel2:#1c242b;--line:#2a343c;
+    --ink:#e7edf1;--mut:#8b97a1;--mut2:#5e6a73;
+    --teal:#1fb6a6;--amber:#ffb020;--red:#e5564b;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;font-family:var(--sans);background:var(--bg);color:var(--ink);overflow:hidden}
+  #map{position:absolute;inset:0;background:#0e1317}
+  .leaflet-container{background:#0e1317}
+
+  /* top bar */
+  .topbar{position:absolute;top:10px;left:10px;right:10px;z-index:1000;display:flex;gap:8px;align-items:center;
+    pointer-events:none;flex-wrap:wrap}
+  .topbar>*{pointer-events:auto}
+  .brand{background:linear-gradient(180deg,#1a2127,#141a1f);border:1px solid var(--line);border-radius:10px;
+    padding:8px 12px;display:flex;flex-direction:column;line-height:1.05}
+  .brand b{font-size:13px}.brand span{font:600 10px var(--mono);color:var(--mut);letter-spacing:.04em;text-transform:uppercase}
+  .search{position:relative;flex:1;min-width:200px;max-width:420px}
+  .search input{width:100%;background:var(--panel);border:1px solid var(--line);color:var(--ink);
+    border-radius:10px;padding:11px 13px;font:14px var(--sans)}
+  .search input:focus{outline:none;border-color:var(--teal)}
+  .sugg{position:absolute;top:46px;left:0;right:0;background:var(--panel);border:1px solid var(--line);
+    border-radius:10px;overflow:hidden;display:none}
+  .sugg.show{display:block}
+  .sugg div{padding:10px 13px;font-size:13px;cursor:pointer;border-bottom:1px solid var(--line)}
+  .sugg div:last-child{border-bottom:none}.sugg div:hover{background:var(--panel2)}
+  .tbtns{display:flex;gap:6px;flex-wrap:wrap}
+  .btn{appearance:none;border:1px solid var(--line);background:var(--panel);color:var(--ink);
+    font:600 12px var(--sans);padding:9px 11px;border-radius:10px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+  .btn:hover{background:var(--panel2);border-color:#3a4750}
+  .btn.primary{background:var(--teal);border-color:var(--teal);color:#04201d}
+  .btn.active{background:var(--amber);border-color:var(--amber);color:#2b1c00}
+  .btn svg{width:15px;height:15px}
+
+  /* side panel */
+  .panel{position:absolute;top:62px;right:10px;width:312px;max-height:calc(100% - 84px);z-index:1000;
+    background:var(--panel);border:1px solid var(--line);border-radius:12px;display:flex;flex-direction:column;overflow:hidden}
+  .phead{padding:11px 13px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between}
+  .phead h2{margin:0;font:600 12px var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--mut)}
+  .pill{font:600 11px var(--mono);background:var(--panel2);border:1px solid var(--line);padding:3px 8px;border-radius:999px;color:var(--teal)}
+  .pscroll{overflow:auto}
+  .empty{padding:24px 16px;text-align:center;color:var(--mut);font-size:13px;line-height:1.5}
+  .list{padding:7px}
+  .cam{display:flex;align-items:center;gap:9px;padding:8px 9px;border-radius:9px;cursor:pointer;border:1px solid transparent}
+  .cam:hover{background:var(--panel2)}.cam.sel{background:var(--panel2);border-color:var(--amber)}
+  .dot{width:22px;height:22px;border-radius:6px;flex:none;display:grid;place-items:center;color:#fff}
+  .dot svg{width:13px;height:13px}.cam .meta{flex:1;min-width:0}
+  .cam .meta b{font:700 12px var(--mono);display:block}.cam .meta span{font-size:11px;color:var(--mut);display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ed{padding:13px;border-top:1px solid var(--line)}
+  .row{margin-bottom:12px}
+  .row>label{display:block;font:600 11px var(--sans);color:var(--mut);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px}
+  .row input[type=text],.row select{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:7px;padding:8px;font:13px var(--sans)}
+  .seg{display:flex;gap:5px}
+  .seg button{flex:1;border:1px solid var(--line);background:var(--panel2);color:var(--mut);border-radius:7px;padding:7px 3px;font:600 10.5px var(--sans);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px}
+  .seg button svg{width:15px;height:15px}
+  .slabel{display:flex;justify-content:space-between;font:600 11px var(--sans);color:var(--mut);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px}
+  .slabel b{font:700 12px var(--mono);color:var(--ink)}
+  input[type=range]{width:100%;accent-color:var(--teal);height:22px}
+  .edbtns{display:flex;gap:7px}.edbtns .btn{flex:1;justify-content:center}
+  .chkrow{padding:11px 13px;border-top:1px solid var(--line)}
+  .chk{display:flex;align-items:center;gap:9px;font-size:13px;padding:4px 0;cursor:pointer}
+  .chk input{accent-color:var(--teal);width:16px;height:16px}
+
+  .toast{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);z-index:1200;background:rgba(10,14,17,.92);
+    border:1px solid var(--line);padding:9px 15px;border-radius:20px;font:600 12.5px var(--sans);opacity:0;transition:.2s;pointer-events:none;white-space:nowrap}
+  .toast.show{opacity:1}
+
+  /* camera markers */
+  .cammk{position:relative;width:24px;height:24px;border-radius:7px;background:var(--col,#2f7fe0);
+    border:2px solid rgba(0,0,0,.4);box-shadow:0 1px 5px rgba(0,0,0,.55);display:grid;place-items:center}
+  .cammk.sel{border-color:#fff}
+  .cammk .arr{position:absolute;top:-9px;left:50%;margin-left:-5px;width:0;height:0;
+    border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:9px solid #fff;transform-origin:50% 18px}
+  .cammk b{font:700 10px var(--mono);color:#fff}
+  .tiph{width:15px;height:15px;border-radius:50%;background:var(--amber);border:2px solid #2b1c00;box-shadow:0 1px 4px rgba(0,0,0,.6)}
+  .vtx{width:12px;height:12px;border-radius:50%;background:#1fb6a6;border:2px solid #04201d;box-shadow:0 1px 3px rgba(0,0,0,.5)}
+
+  .floatbar{position:absolute;bottom:16px;left:16px;z-index:1100;background:var(--panel);border:1px solid var(--line);
+    border-radius:10px;padding:10px 12px;display:flex;gap:10px;align-items:center;font-size:12px;flex-wrap:wrap;max-width:calc(100% - 32px)}
+  .floatbar span.t{color:var(--mut)}
+  .statcard{position:absolute;bottom:16px;left:16px;z-index:1090;background:var(--panel);border:1px solid var(--line);
+    border-radius:12px;padding:12px 14px;min-width:210px;display:none}
+  .statcard.show{display:block}
+  .statcard h3{margin:0 0 9px;font:600 11px var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--mut)}
+  .stbar{height:9px;border-radius:5px;overflow:hidden;display:flex;margin-bottom:10px;background:#0e1317}
+  .stbar i{display:block;height:100%}
+  .strow{display:flex;align-items:center;gap:8px;font-size:12px;margin:5px 0}
+  .strow .sw{width:11px;height:11px;border-radius:3px;flex:none}
+  .strow b{margin-left:auto;font:700 12px var(--mono)}
+  .stmeta{font:600 11px var(--mono);color:var(--mut);margin-top:9px;border-top:1px solid var(--line);padding-top:8px}
+  .leaflet-canvas-ana{position:absolute;top:0;left:0;pointer-events:none;z-index:399}
+
+  /* leaflet attribution + zoom dark */
+  .leaflet-control-attribution{background:rgba(17,22,26,.85)!important;color:#8b97a1!important}
+  .leaflet-control-attribution a{color:#9fc9c3!important}
+  .leaflet-bar a{background:#161c21;color:#e7edf1;border-color:#2a343c}
+  .leaflet-bar a:hover{background:#1c242b}
+  .leaflet-control-layers{background:#161c21!important;color:#e7edf1!important;border:1px solid #2a343c!important;border-radius:10px!important}
+  .leaflet-control-layers-toggle{filter:invert(.9)}
+
+  @media(max-width:760px){
+    .panel{left:10px;right:10px;width:auto;top:auto;bottom:10px;max-height:46vh}
+    .brand{display:none}.search{order:2;flex-basis:100%;max-width:none}
+  }
+  @media print{
+    .topbar,.panel,.toast,.leaflet-control-zoom,.leaflet-control-layers{display:none!important}
+    #map{inset:0}
+  }
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<div class="topbar">
+  <div class="brand"><b>Camera-inplanting</b><span>kaarttool · meters</span></div>
+  <div class="search">
+    <input id="q" type="text" placeholder="Zoek adres of bedrijf in Vlaanderen…" autocomplete="off">
+    <div class="sugg" id="sugg"></div>
+  </div>
+  <div class="tbtns">
+    <button class="btn primary" id="addBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 4h-5L7 7H4a2 2 0 00-2 2v9a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3.5"/></svg>Camera</button>
+    <button class="btn" id="shareBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>Deel</button>
+    <button class="btn" id="upBtn" title="Eigen luchtfoto/drone-beeld over de kaart leggen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15l-5-5L5 21"/><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/></svg>Foto</button>
+    <button class="btn" id="boundBtn" title="Teken de terreingrens"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7l8-4 8 4-8 4-8-4z"/><path d="M4 7v10l8 4 8-4V7"/></svg>Terrein</button>
+    <button class="btn" id="anaBtn" title="Dekkingsanalyse: gaten rood, overlap groen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Analyse</button>
+    <button class="btn" id="csvBtn" title="Cameralijst exporteren voor offerte"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 17v-6M12 17v-2M15 17v-4"/><path d="M14 3H6a2 2 0 00-2 2v14a2 2 0 002 2h12a2 2 0 002-2V9z"/><path d="M14 3v6h6"/></svg>CSV</button>
+    <button class="btn" id="jsonBtn">JSON</button>
+    <button class="btn" id="printBtn" title="Print of bewaar als PDF">PDF</button>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="phead"><h2>Camera's</h2><span class="pill" id="count">0</span></div>
+  <div class="pscroll">
+    <div id="listWrap"></div>
+    <div id="editor"></div>
+  </div>
+  <div class="chkrow">
+    <label class="chk"><input type="checkbox" id="lCone" checked> Gezichtsveld tonen</label>
+    <label class="chk"><input type="checkbox" id="lLabel" checked> Labels tonen</label>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="statcard" id="statcard">
+  <h3>Dekkingsanalyse</h3>
+  <div class="stbar" id="stbar"></div>
+  <div class="strow"><span class="sw" style="background:#4fa24a"></span>Overlap (≥2 cam's)<b id="stOv">–</b></div>
+  <div class="strow"><span class="sw" style="background:#5aa9ff"></span>Gedekt (1 cam)<b id="stOk">–</b></div>
+  <div class="strow"><span class="sw" style="background:#e5564b"></span>Blinde vlek<b id="stGap">–</b></div>
+  <div class="stmeta" id="stMeta"></div>
+</div>
+<input type="file" id="fileImg" accept="image/*" style="display:none">
+<input type="file" id="fileJson" accept=".json,application/json" style="display:none">
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+  integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script>
+const $=id=>document.getElementById(id);
+const R=6371000, D2R=Math.PI/180, R2D=180/Math.PI;
+
+/* ---------- map + layers ---------- */
+const map=L.map('map',{zoomControl:true,maxZoom:22}).setView([51.1373,3.3185],18);
+
+const esri=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+  {maxZoom:22,maxNativeZoom:19,attribution:'Luchtfoto © Esri'});
+const ortho=L.tileLayer.wms('https://geo.api.vlaanderen.be/OMWRGBMRVL/wms',
+  {layers:'OMWRGBMRVL',format:'image/png',transparent:false,version:'1.3.0',maxZoom:22,attribution:'Orthofoto 15cm © Digitaal Vlaanderen'});
+const osm=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+  {maxZoom:19,attribution:'© OpenStreetMap'});
+const grb=L.tileLayer.wms('https://geo.api.vlaanderen.be/GRB-basiskaart/wms',
+  {layers:'GRB_BSK',format:'image/png',transparent:true,version:'1.3.0',opacity:.85,maxZoom:22,attribution:'GRB © Digitaal Vlaanderen'});
+
+esri.addTo(map);
+const baseLayers={"Luchtfoto (wereld)":esri,"Luchtfoto Vlaanderen 15cm":ortho,"Kaart (OSM)":osm};
+const overlays={"GRB-kadaster (Vlaanderen)":grb};
+L.control.layers(baseLayers,overlays,{position:'topright'}).addTo(map);
+let activeBase='esri';
+map.on('baselayerchange',e=>{activeBase=e.name.includes('Vlaanderen')?'ortho':e.name.includes('OSM')?'osm':'esri';scheduleSave();});
+
+/* ---------- geometry helpers (real metres) ---------- */
+function dest(lat,lng,brng,d){const δ=d/R,θ=brng*D2R,φ1=lat*D2R,λ1=lng*D2R;
+  const φ2=Math.asin(Math.sin(φ1)*Math.cos(δ)+Math.cos(φ1)*Math.sin(δ)*Math.cos(θ));
+  const λ2=λ1+Math.atan2(Math.sin(θ)*Math.sin(δ)*Math.cos(φ1),Math.cos(δ)-Math.sin(φ1)*Math.sin(φ2));
+  return [φ2*R2D,((λ2*R2D+540)%360)-180];}
+function bearing(a,b){const φ1=a.lat*D2R,φ2=b.lat*D2R,Δλ=(b.lng-a.lng)*D2R;
+  const y=Math.sin(Δλ)*Math.cos(φ2),x=Math.cos(φ1)*Math.sin(φ2)-Math.sin(φ1)*Math.cos(φ2)*Math.cos(Δλ);
+  return (Math.atan2(y,x)*R2D+360)%360;}
+
+/* ---------- camera model ---------- */
+const TYPES={
+  fixed:{name:"Vast",col:"#2f7fe0",fov:75,range:28,icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="8" width="13" height="8" rx="1.5"/><path d="M15 11l6-3v8l-6-3"/></svg>'},
+  dome:{name:"Dome",col:"#7a5cd0",fov:360,range:18,icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 14a8 8 0 0116 0"/><rect x="3" y="14" width="18" height="4" rx="1"/></svg>'},
+  ptz:{name:"PTZ",col:"#e08a2f",fov:55,range:45,icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>'}
+};
+const COMP=["N","NO","O","ZO","Z","ZW","W","NW"];
+const compName=d=>COMP[Math.round(((d%360)+360)%360/45)%8];
+
+let cams=[];            // {id,label,lat,lng,dir,fov,range,type,h, _m,_c,_h}
+let sel=null, nextNum=1, mode="idle";
+
+function makeIcon(c){
+  const T=TYPES[c.type];const dome=c.type==='dome'&&c.fov>=360;
+  return L.divIcon({className:'',iconSize:[24,24],iconAnchor:[12,12],
+    html:`<div class="cammk ${c.id===sel?'sel':''}" style="--col:${T.col}">${dome?'':`<span class="arr" style="transform:rotate(${c.dir}deg)"></span>`}<b>${c.label}</b></div>`});
+}
+function conePts(c){
+  if(c.type==='dome'&&c.fov>=360)return null;
+  const pts=[[c.lat,c.lng]],n=26,half=c.fov/2;
+  for(let i=0;i<=n;i++){const a=c.dir-half+c.fov*(i/n);pts.push(dest(c.lat,c.lng,a,c.range));}
+  return pts;
+}
+function renderCam(c){
+  const T=TYPES[c.type];const showCone=$("lCone").checked,showLabel=$("lLabel").checked;
+  if(c._c){map.removeLayer(c._c);c._c=null;}
+  if(c._h){map.removeLayer(c._h);c._h=null;}
+  if(showCone){
+    const style={color:c.id===sel?'#ffb020':T.col,weight:1.4,fillColor:c.id===sel?'#ffb020':T.col,fillOpacity:.18};
+    if(c.type==='dome'&&c.fov>=360){c._c=L.circle([c.lat,c.lng],{radius:c.range,...style});}
+    else{c._c=L.polygon(conePts(c),style);}
+    c._c.addTo(map);c._c.on('click',()=>select(c.id));
+  }
+  if(!c._m){
+    c._m=L.marker([c.lat,c.lng],{icon:makeIcon(c),draggable:true,zIndexOffset:1000}).addTo(map);
+    c._m.on('click',()=>select(c.id));
+    c._m.on('drag',()=>{const ll=c._m.getLatLng();c.lat=ll.lat;c.lng=ll.lng;drawHandle(c);if(c._c){if(c._c.setLatLngs&&conePts(c))c._c.setLatLngs(conePts(c));else if(c._c.setLatLng)c._c.setLatLng([c.lat,c.lng]);}});
+    c._m.on('dragend',()=>{scheduleSave();});
+  }else{c._m.setLatLng([c.lat,c.lng]);c._m.setIcon(makeIcon(c));}
+  c._m.setOpacity(showLabel?1:1);
+  if(c.id===sel)drawHandle(c);
+}
+function drawHandle(c){
+  if(c.type==='dome'&&c.fov>=360){if(c._h){map.removeLayer(c._h);c._h=null;}return;}
+  if(c.id!==sel){if(c._h){map.removeLayer(c._h);c._h=null;}return;}
+  const pos=dest(c.lat,c.lng,c.dir,c.range);
+  if(!c._h){
+    c._h=L.marker(pos,{icon:L.divIcon({className:'',iconSize:[15,15],iconAnchor:[7,7],html:'<div class="tiph"></div>'}),draggable:true,zIndexOffset:1100}).addTo(map);
+    c._h.on('drag',()=>{const hp=c._h.getLatLng(),ctr=L.latLng(c.lat,c.lng);
+      c.dir=Math.round(bearing(ctr,hp));c.range=Math.max(2,Math.round(ctr.distanceTo(hp)));
+      c._m.setIcon(makeIcon(c));if(c._c&&conePts(c))c._c.setLatLngs(conePts(c));syncEditor(true);});
+    c._h.on('dragend',()=>scheduleSave());
+  }else c._h.setLatLng(pos);
+}
+function renderAll(){cams.forEach(renderCam);refreshList();}
+
+/* ---------- ops ---------- */
+function addCam(latlng){const T=TYPES.fixed;
+  const c={id:'c'+Date.now()+Math.random().toString(36).slice(2,5),label:'C'+String(nextNum++).padStart(2,'0'),
+    lat:latlng.lat,lng:latlng.lng,dir:225,fov:T.fov,range:T.range,type:'fixed',h:4};
+  cams.push(c);select(c.id);renderCam(c);refreshList();scheduleSave();toast('Camera '+c.label+' geplaatst — sleep het oranje punt om te richten');}
+const byId=id=>cams.find(c=>c.id===id);
+function select(id){const prev=byId(sel);sel=id;if(prev){prev._m&&prev._m.setIcon(makeIcon(prev));drawHandle(prev);renderCam(prev);}
+  const c=byId(id);if(c){c._m&&c._m.setIcon(makeIcon(c));renderCam(c);drawHandle(c);}refreshList();syncEditor();}
+function delCam(id){const c=byId(id);if(!c)return;[c._m,c._c,c._h].forEach(l=>l&&map.removeLayer(l));
+  cams=cams.filter(x=>x.id!==id);if(sel===id)sel=null;refreshList();syncEditor();scheduleSave();}
+function dupCam(id){const o=byId(id);const p=dest(o.lat,o.lng,90,12);
+  const c={...o,id:'c'+Date.now()+Math.random().toString(36).slice(2,5),label:'C'+String(nextNum++).padStart(2,'0'),lat:p[0],lng:p[1],_m:null,_c:null,_h:null};
+  cams.push(c);select(c.id);renderCam(c);scheduleSave();}
+
+/* ---------- list + editor ---------- */
+function refreshList(){
+  $("count").textContent=cams.length;
+  const w=$("listWrap");
+  if(!cams.length){w.innerHTML='<div class="empty">Nog geen camera’s.<br>Klik op <b>Camera</b> en daarna op de kaart.</div>';return;}
+  w.innerHTML='<div class="list">'+cams.map(c=>{const T=TYPES[c.type];
+    return `<div class="cam ${c.id===sel?'sel':''}" data-id="${c.id}"><span class="dot" style="background:${T.col}">${T.icon}</span>
+    <span class="meta"><b>${c.label}</b><span>${T.name} · ${c.type==='dome'&&c.fov>=360?'360°':c.fov+'° '+compName(c.dir)} · ${c.range} m</span></span></div>`;}).join('')+'</div>';
+  w.querySelectorAll('.cam').forEach(d=>d.onclick=()=>{select(d.dataset.id);const c=byId(d.dataset.id);map.panTo([c.lat,c.lng]);});
+}
+function syncEditor(valuesOnly){
+  const c=byId(sel),ed=$("editor");if(!c){ed.innerHTML="";return;}
+  if(valuesOnly){const vf=$("vFov"),vr=$("vRange"),vd=$("vDir"),ef=$("eFov"),er=$("eRange"),edd=$("eDir");
+    if(vr)vr.textContent=c.range+' m';if(er)er.value=c.range;if(vd)vd.textContent=c.dir+'° '+compName(c.dir);if(edd)edd.value=c.dir;refreshList();return;}
+  const T=TYPES[c.type];const dome=c.type==='dome'&&c.fov>=360;
+  ed.innerHTML=`<div class="ed">
+    <div class="row"><label>Naam</label><input type="text" id="eLabel" value="${c.label}"></div>
+    <div class="row"><label>Type</label><div class="seg">
+      ${Object.entries(TYPES).map(([k,v])=>`<button data-t="${k}" style="${c.type===k?'background:'+v.col+';border-color:'+v.col+';color:#fff':''}">${v.icon}${v.name}</button>`).join('')}
+    </div></div>
+    ${c.type==='dome'?`<div class="row"><label class="chk" style="text-transform:none;color:var(--ink)"><input type="checkbox" id="eDome" ${dome?'checked':''}> Volledig 360° zicht</label></div>`:''}
+    <div class="row" style="${dome?'display:none':''}"><div class="slabel">Gezichtshoek<b id="vFov">${c.fov}°</b></div><input type="range" id="eFov" min="20" max="120" value="${Math.min(120,c.fov)}"></div>
+    <div class="row"><div class="slabel">Bereik<b id="vRange">${c.range} m</b></div><input type="range" id="eRange" min="3" max="150" value="${c.range}"></div>
+    <div class="row" style="${dome?'display:none':''}"><div class="slabel">Richting<b id="vDir">${c.dir}° ${compName(c.dir)}</b></div><input type="range" id="eDir" min="0" max="359" value="${c.dir}"></div>
+    <div class="row"><div class="slabel">Montagehoogte<b id="vH">${c.h} m</b></div><input type="range" id="eH" min="2" max="12" step="0.5" value="${c.h}"></div>
+    <div class="edbtns"><button class="btn" id="eDup">Dupliceer</button><button class="btn" id="eDel" style="color:#ffb4ad">Verwijder</button></div>
+  </div>`;
+  $("eLabel").oninput=e=>{c.label=e.target.value||c.label;c._m.setIcon(makeIcon(c));refreshList();scheduleSave();};
+  ed.querySelectorAll('.seg button').forEach(b=>b.onclick=()=>{const k=b.dataset.t;c.type=k;
+    if(k==='dome')c.fov=360;else if(c.fov>=360)c.fov=TYPES[k].fov;renderCam(c);drawHandle(c);syncEditor();refreshList();scheduleSave();});
+  const dm=$("eDome");if(dm)dm.onchange=e=>{c.fov=e.target.checked?360:75;renderCam(c);drawHandle(c);syncEditor();refreshList();scheduleSave();};
+  const ef=$("eFov");if(ef)ef.oninput=e=>{c.fov=+e.target.value;$("vFov").textContent=c.fov+'°';renderCam(c);drawHandle(c);refreshList();scheduleSave();};
+  $("eRange").oninput=e=>{c.range=+e.target.value;$("vRange").textContent=c.range+' m';renderCam(c);drawHandle(c);refreshList();scheduleSave();};
+  const ed2=$("eDir");if(ed2)ed2.oninput=e=>{c.dir=+e.target.value;$("vDir").textContent=c.dir+'° '+compName(c.dir);c._m.setIcon(makeIcon(c));renderCam(c);drawHandle(c);refreshList();scheduleSave();};
+  $("eH").oninput=e=>{c.h=+e.target.value;$("vH").textContent=c.h+' m';scheduleSave();};
+  $("eDup").onclick=()=>dupCam(c.id);$("eDel").onclick=()=>delCam(c.id);
+}
+
+/* ---------- modes ---------- */
+function setMode(m){mode=m;$("addBtn").classList.toggle('active',m==='add');
+  L.DomUtil.removeClass(map._container,'crosshair');if(m==='add'){map._container.style.cursor='crosshair';toast('Klik op de kaart om de camera te plaatsen');}else map._container.style.cursor='';}
+$("addBtn").onclick=()=>setMode(mode==='add'?'idle':'add');
+map.on('click',e=>{if(mode==='add'){addCam(e.latlng);setMode('idle');}else if(mode==='terrein'){addVertex(e.latlng);}});
+
+/* ---------- layer toggles ---------- */
+$("lCone").onchange=renderAll;$("lLabel").onchange=()=>{/* labels are in marker; rebuild */ cams.forEach(c=>c._m&&c._m.setIcon(makeIcon(c)));};
+
+/* ---------- address search (Geopunt JSONP) ---------- */
+function jsonp(url){return new Promise((res,rej)=>{const cb='gp'+Math.random().toString(36).slice(2);
+  const s=document.createElement('script');window[cb]=d=>{res(d);delete window[cb];s.remove();};
+  s.onerror=()=>{rej();delete window[cb];s.remove();};s.src=url+'&callback='+cb;document.body.appendChild(s);});}
+let stmr;
+$("q").addEventListener('input',e=>{clearTimeout(stmr);const v=e.target.value.trim();
+  if(v.length<3){$("sugg").classList.remove('show');return;}
+  stmr=setTimeout(async()=>{try{const d=await jsonp('https://loc.geopunt.be/v4/Suggestion?q='+encodeURIComponent(v)+'&c=6');
+    const arr=(d&&d.SuggestionResult)||[];const box=$("sugg");
+    box.innerHTML=arr.map(s=>`<div>${s}</div>`).join('');box.classList.toggle('show',arr.length>0);
+    box.querySelectorAll('div').forEach(el=>el.onclick=()=>{$("q").value=el.textContent;$("sugg").classList.remove('show');geocode(el.textContent);});
+  }catch{}},220);});
+$("q").addEventListener('keydown',e=>{if(e.key==='Enter'){$("sugg").classList.remove('show');geocode(e.target.value.trim());}});
+document.addEventListener('click',e=>{if(!e.target.closest('.search'))$("sugg").classList.remove('show');});
+async function geocode(q){if(!q)return;try{const d=await jsonp('https://loc.geopunt.be/v4/Location?q='+encodeURIComponent(q)+'&c=1');
+  const r=d&&d.LocationResult&&d.LocationResult[0];if(r){map.setView([r.Location.Lat_WGS84,r.Location.Lon_WGS84],19);toast(r.FormattedAddress||q);}
+  else toast('Adres niet gevonden');}catch{toast('Zoeken mislukt (netwerk?)');}}
+
+/* ---------- upload aerial photo overlay ---------- */
+let imgOverlay=null;
+$("upBtn").onclick=()=>$("fileImg").click();
+$("fileImg").onchange=e=>{const f=e.target.files[0];if(!f)return;const url=URL.createObjectURL(f);
+  if(imgOverlay)map.removeLayer(imgOverlay);
+  const b=map.getBounds().pad(-0.15);
+  imgOverlay=L.imageOverlay(url,b,{opacity:.7,interactive:false}).addTo(map);
+  toast('Foto geplaatst. Sleep de kaart zodat ze past; gebruik de schuif voor transparantie.');
+  showImgControls();e.target.value='';};
+function showImgControls(){
+  let bar=$("imgbar");if(bar)bar.remove();
+  bar=document.createElement('div');bar.id='imgbar';
+  bar.style.cssText='position:absolute;bottom:16px;left:16px;z-index:1100;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:flex;gap:10px;align-items:center;font-size:12px';
+  bar.innerHTML='<span style="color:var(--mut)">Foto-overlay</span><input type="range" id="imgop" min="10" max="100" value="70" style="width:120px"><button class="btn" id="imgfit">Pas in kader</button><button class="btn" id="imgdel" style="color:#ffb4ad">Weg</button>';
+  document.body.appendChild(bar);
+  $("imgop").oninput=ev=>imgOverlay&&imgOverlay.setOpacity(ev.target.value/100);
+  $("imgfit").onclick=()=>{if(imgOverlay){imgOverlay.setBounds(map.getBounds().pad(-0.15));}};
+  $("imgdel").onclick=()=>{if(imgOverlay){map.removeLayer(imgOverlay);imgOverlay=null;}bar.remove();};
+}
+
+/* ---------- site boundary (terrein) ---------- */
+let boundary=[], bLayer=null, bDraw=null, bVtx=[];
+$("boundBtn").onclick=()=>{ if(mode==='terrein'){finishBoundary();return;} startBoundary(); };
+function startBoundary(){
+  setMode('terrein');clearBoundary();bDraw=L.polyline([],{color:'#1fb6a6',weight:2,dashArray:'5 4'}).addTo(map);
+  $("boundBtn").classList.add('active');map._container.style.cursor='crosshair';
+  floatBar('Klik de hoekpunten van het terrein · ',[['Klaar',finishBoundary],['Wis',()=>{clearBoundary();killBar();setMode('idle');}]]);
+}
+function addVertex(ll){boundary.push([ll.lat,ll.lng]);bDraw.setLatLngs(boundary);
+  bVtx.push(L.marker(ll,{icon:L.divIcon({className:'',iconSize:[12,12],iconAnchor:[6,6],html:'<div class="vtx"></div>'})}).addTo(map));}
+function finishBoundary(){
+  if(boundary.length>=3){if(bDraw){map.removeLayer(bDraw);bDraw=null;}bVtx.forEach(m=>map.removeLayer(m));bVtx=[];
+    bLayer=L.polygon(boundary,{color:'#1fb6a6',weight:2,dashArray:'6 4',fill:true,fillOpacity:.04}).addTo(map);
+    toast('Terrein vastgelegd ('+boundary.length+' hoekpunten)');scheduleSave();if(analysisOn)scheduleAnalysis();}
+  else{clearBoundary();}
+  $("boundBtn").classList.remove('active');map._container.style.cursor='';killBar();mode='idle';
+}
+function clearBoundary(){[bLayer,bDraw,...bVtx].forEach(l=>l&&map.removeLayer(l));bLayer=bDraw=null;bVtx=[];boundary=[];}
+function pointInPoly(lat,lng,poly){let c=false;for(let i=0,j=poly.length-1;i<poly.length;j=i++){
+  const yi=poly[i][0],xi=poly[i][1],yj=poly[j][0],xj=poly[j][1];
+  if(((yi>lat)!==(yj>lat))&&(lng<(xj-xi)*(lat-yi)/(yj-yi)+xi))c=!c;}return c;}
+
+/* ---------- coverage analysis ---------- */
+let analysisOn=false, anaCanvas=null, anaCells=null, anaStep=4;
+function angDiff(a,b){const d=Math.abs(a-b)%360;return d>180?360-d:d;}
+function coverCount(lat,lng){let n=0;const p=L.latLng(lat,lng);
+  for(const c of cams){const cc=L.latLng(c.lat,c.lng);if(cc.distanceTo(p)>c.range)continue;
+    if(c.type==='dome'&&c.fov>=360){n++;continue;}
+    if(angDiff(bearing(cc,p),c.dir)<=c.fov/2)n++;}
+  return n;}
+function ensureCanvas(){if(anaCanvas)return;anaCanvas=document.createElement('canvas');
+  anaCanvas.style.cssText='position:absolute;pointer-events:none;z-index:-1';
+  map.getPanes().overlayPane.appendChild(anaCanvas);
+  ['moveend','zoomend','resize','viewreset','move','zoom'].forEach(ev=>map.on(ev,drawAna));}
+function computeAnalysis(){
+  if(boundary.length<3){anaCells=null;return;}
+  let minLa=90,maxLa=-90,minLo=180,maxLo=-180;
+  boundary.forEach(([la,lo])=>{minLa=Math.min(minLa,la);maxLa=Math.max(maxLa,la);minLo=Math.min(minLo,lo);maxLo=Math.max(maxLo,lo);});
+  const midLa=(minLa+maxLa)/2;const mPerDegLa=111320, mPerDegLo=111320*Math.cos(midLa*D2R);
+  const wM=(maxLo-minLo)*mPerDegLo, hM=(maxLa-minLa)*mPerDegLa;
+  anaStep=Math.max(2,Math.round(Math.sqrt(Math.max(1,wM*hM)/7000)));
+  const dLa=anaStep/mPerDegLa, dLo=anaStep/mPerDegLo;
+  const cells=[];let inside=0,gap=0,ok=0,ov=0;
+  for(let la=minLa;la<=maxLa;la+=dLa)for(let lo=minLo;lo<=maxLo;lo+=dLo){
+    if(!pointInPoly(la,lo,boundary))continue;inside++;
+    const n=coverCount(la,lo);cells.push([la,lo,n]);
+    if(n===0)gap++;else if(n===1)ok++;else ov++;}
+  anaCells=cells;
+  const area=inside*anaStep*anaStep;const pct=v=>inside?Math.round(v/inside*100):0;
+  $("statcard").classList.add('show');
+  $("stbar").innerHTML=`<i style="width:${pct(ov)}%;background:#4fa24a"></i><i style="width:${pct(ok)}%;background:#5aa9ff"></i><i style="width:${pct(gap)}%;background:#e5564b"></i>`;
+  $("stOv").textContent=pct(ov)+'%';$("stOk").textContent=pct(ok)+'%';$("stGap").textContent=pct(gap)+'%';
+  $("stMeta").innerHTML=`Terrein ≈ ${area.toLocaleString('nl-BE')} m² · ${cams.length} camera’s · raster ${anaStep} m`;
+}
+function drawAna(){if(!analysisOn||!anaCells||!anaCanvas)return;
+  const s=map.getSize();const tl=map.containerPointToLayerPoint([0,0]);
+  L.DomUtil.setPosition(anaCanvas,tl);anaCanvas.width=s.x;anaCanvas.height=s.y;
+  const ctx=anaCanvas.getContext('2d');ctx.clearRect(0,0,s.x,s.y);
+  const z=map.getZoom();const mpp=40075016.686*Math.cos(map.getCenter().lat*D2R)/Math.pow(2,z+8);
+  const sz=Math.max(2,anaStep/mpp)+1;
+  for(const [la,lo,n] of anaCells){if(n===1)continue;
+    const p=map.latLngToContainerPoint([la,lo]);
+    ctx.fillStyle=n===0?'rgba(229,86,75,.42)':'rgba(79,162,74,.45)';
+    ctx.fillRect(p.x-sz/2,p.y-sz/2,sz,sz);}
+}
+let anatmr;function scheduleAnalysis(){clearTimeout(anatmr);anatmr=setTimeout(()=>{computeAnalysis();drawAna();},250);}
+$("anaBtn").onclick=()=>{
+  if(boundary.length<3){toast('Teken eerst een terrein (knop Terrein)');return;}
+  analysisOn=!analysisOn;$("anaBtn").classList.toggle('active',analysisOn);
+  if(analysisOn){ensureCanvas();computeAnalysis();drawAna();}
+  else{anaCells=null;if(anaCanvas){anaCanvas.getContext('2d').clearRect(0,0,anaCanvas.width,anaCanvas.height);}$("statcard").classList.remove('show');}
+};
+
+/* ---------- CSV export (cameralijst voor offerte) ---------- */
+$("csvBtn").onclick=()=>{
+  if(!cams.length){toast('Geen camera’s om te exporteren');return;}
+  const totals={};cams.forEach(c=>totals[c.type]=(totals[c.type]||0)+1);
+  const sep=';';const rows=[];
+  rows.push('# Camera-inplanting'+(boundary.length?' · '+boundary.length+' hoekpunten terrein':''));
+  rows.push('# Datum'+sep+new Date().toLocaleDateString('nl-BE'));
+  rows.push('# Aantal camera’s'+sep+cams.length);
+  Object.entries(totals).forEach(([t,n])=>rows.push('# '+TYPES[t].name+sep+n));
+  if(analysisOn&&anaCells){const tot=anaCells.length,gap=anaCells.filter(c=>c[2]===0).length,ov=anaCells.filter(c=>c[2]>=2).length;
+    rows.push('# Dekking gedekt%'+sep+Math.round((tot-gap)/tot*100));
+    rows.push('# Blinde vlek%'+sep+Math.round(gap/tot*100));
+    rows.push('# Overlap%'+sep+Math.round(ov/tot*100));}
+  rows.push('');
+  rows.push(['Label','Type','Latitude','Longitude','Richting_graden','Kompas','FOV_graden','Bereik_m','Montagehoogte_m'].join(sep));
+  cams.forEach(c=>{const dome=c.type==='dome'&&c.fov>=360;
+    rows.push([c.label,TYPES[c.type].name,c.lat.toFixed(6),c.lng.toFixed(6),dome?'':c.dir,dome?'360°':compName(c.dir),dome?360:c.fov,c.range,c.h].join(sep));});
+  const blob=new Blob(['﻿'+rows.join('\r\n')],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='cameralijst-offerte.csv';a.click();
+  toast('CSV geëxporteerd ('+cams.length+' camera’s)');
+};
+
+/* ---------- generic floating bar ---------- */
+function floatBar(label,btns){killBar();const bar=document.createElement('div');bar.className='floatbar';bar.id='floatbar';
+  bar.innerHTML='<span class="t">'+label+'</span>';
+  btns.forEach(([txt,fn])=>{const b=document.createElement('button');b.className='btn';b.textContent=txt;b.onclick=fn;bar.appendChild(b);});
+  document.body.appendChild(bar);}
+function killBar(){const b=$("floatbar");if(b)b.remove();}
+
+/* ---------- toast ---------- */
+let ttmr;function toast(msg){const t=$("toast");t.textContent=msg;t.classList.add('show');clearTimeout(ttmr);ttmr=setTimeout(()=>t.classList.remove('show'),3200);}
+
+const LS='camplan.kaarttool.v1';
+function state(){const c=map.getCenter();return{c:[+c.lat.toFixed(6),+c.lng.toFixed(6)],z:map.getZoom(),b:activeBase,n:nextNum,
+  bnd:boundary.map(p=>[+p[0].toFixed(6),+p[1].toFixed(6)]),
+  cams:cams.map(x=>({l:x.label,la:+x.lat.toFixed(6),lo:+x.lng.toFixed(6),d:x.dir,f:x.fov,r:x.range,t:x.type,h:x.h}))};}
+function restore(s){if(!s)return;[...cams].forEach(c=>[c._m,c._c,c._h].forEach(l=>l&&map.removeLayer(l)));cams=[];sel=null;
+  nextNum=s.n||1;(s.cams||[]).forEach(x=>{cams.push({id:'c'+Date.now()+Math.random().toString(36).slice(2,6),label:x.l,lat:x.la,lng:x.lo,dir:x.d,fov:x.f,range:x.r,type:x.t,h:x.h});});
+  if(s.c)map.setView(s.c,s.z||18);
+  if(s.b==='ortho'){map.removeLayer(esri);ortho.addTo(map);activeBase='ortho';}else if(s.b==='osm'){map.removeLayer(esri);osm.addTo(map);activeBase='osm';}
+  clearBoundary();if(s.bnd&&s.bnd.length>=3){boundary=s.bnd.map(p=>[p[0],p[1]]);
+    bLayer=L.polygon(boundary,{color:'#1fb6a6',weight:2,dashArray:'6 4',fill:true,fillOpacity:.04}).addTo(map);}
+  renderAll();syncEditor();}
+let savtmr;function scheduleSave(){clearTimeout(savtmr);savtmr=setTimeout(()=>{try{localStorage.setItem(LS,JSON.stringify(state()));}catch{}},400);if(analysisOn)scheduleAnalysis();}
+map.on('moveend zoomend',scheduleSave);
+
+function encodeState(){return btoa(unescape(encodeURIComponent(JSON.stringify(state()))));}
+function decodeState(h){try{return JSON.parse(decodeURIComponent(escape(atob(h))));}catch{return null;}}
+$("shareBtn").onclick=async()=>{const url=location.origin+location.pathname+'#p='+encodeState();
+  try{await navigator.clipboard.writeText(url);toast('Deelbare link gekopieerd ✓');}catch{prompt('Kopieer deze link:',url);}
+  history.replaceState(null,'','#p='+encodeState());};
+
+/* JSON export (click) / import (dubbelklik of sleep bestand op de kaart) */
+$("jsonBtn").onclick=()=>{const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(state(),null,2)],{type:'application/json'}));
+  a.download='camera-inplanting.json';a.click();toast('JSON geëxporteerd · dubbelklik JSON-knop om te importeren');};
+$("jsonBtn").ondblclick=()=>$("fileJson").click();
+$("fileJson").onchange=e=>{const f=e.target.files[0];if(f)readJson(f);e.target.value='';};
+function readJson(f){const rd=new FileReader();rd.onload=()=>{const s=decodeJSON(rd.result);if(s){restore(s);refreshList();toast('JSON geïmporteerd ✓');}else toast('Ongeldige JSON');};rd.readAsText(f);}
+function decodeJSON(t){try{return JSON.parse(t);}catch{return null;}}
+window.addEventListener('dragover',e=>e.preventDefault());
+window.addEventListener('drop',e=>{e.preventDefault();const f=e.dataTransfer.files[0];if(!f)return;
+  if(f.type.startsWith('image/')){const url=URL.createObjectURL(f);if(imgOverlay)map.removeLayer(imgOverlay);
+    imgOverlay=L.imageOverlay(url,map.getBounds().pad(-0.15),{opacity:.7}).addTo(map);showImgControls();toast('Foto geplaatst — sleep de kaart zodat ze past');}
+  else readJson(f);});
+
+$("printBtn").onclick=()=>window.print();
+
+/* keyboard delete */
+window.addEventListener('keydown',e=>{if((e.key==='Delete'||e.key==='Backspace')&&sel&&document.activeElement.tagName!=='INPUT')delCam(sel);});
+
+/* ---------- init: URL hash > localStorage ---------- */
+(function init(){
+  const m=location.hash.match(/p=([^&]+)/);
+  if(m){const s=decodeState(m[1]);if(s){restore(s);refreshList();toast('Gedeeld plan geladen');return;}}
+  try{const ls=localStorage.getItem(LS);if(ls){restore(JSON.parse(ls));refreshList();return;}}catch{}
+  refreshList();toast('Zoek een adres of klik ‘Camera’ om te starten');
+})();
+</script>
+</body>
+</html>
