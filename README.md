@@ -13,8 +13,12 @@ het resultaat kan delen en exporteren. Geen backend, geen build-stap, geen API-s
   patchkasten/racks, nuts-/kabelintredepunten en WiFi access points. Elk met een montagehoogte en
   een vrije notitie ("waar komt wat binnen").
 - **Camera's richten**: sleep het oranje punt om richting + bereik in te stellen; FOV-kegel in echte meters.
-- **Bekabeling**: knop *Verbind* → klik twee toestellen om ze met een lijn te verbinden (toont wat
-  met wat verbindt). Verbindingen verschuiven mee als je een toestel versleept.
+- **Bekabeling**: knop *Verbind* → klik twee toestellen om ze met een lijn te verbinden. Selecteer
+  een kabel om het **type** (UTP/Cat6, glasvezel, stroom, overig — elk een eigen kleur) te kiezen;
+  de **lengte (m)** wordt automatisch berekend en getoond. Verschuift mee als je een toestel
+  versleept. Totale lengte per type komt in de CSV.
+- **Tekst / kamerlabels**: knop *Tekst* → klik op de kaart en typ een naam (bv. "Serverruimte").
+  Versleepbaar; verschijnt mee op het SVG-plan.
 - **Op ware schaal**: de luchtfoto is georefereerd, dus alle lengtes en afstanden zijn meteen in
   echte meters (Vlaanderen-orthofoto tot ±15 cm). Geen kalibratie nodig.
 - **Plattegrond tekenen** via *Binnen*: klik punten om muren te tekenen. Haakse hoeken worden
@@ -47,6 +51,17 @@ het resultaat kan delen en exporteren. Geen backend, geen build-stap, geen API-s
 ## Lokaal openen
 
 Open `index.html` rechtstreeks in de browser. (De kaart heeft internet nodig voor de tegels.)
+
+## Tests
+
+De pure reken-/geo-functies staan in `geo.js` (gedeeld door de app en de tests). Draaien met Node
+(geen dependencies):
+
+```bash
+node --test
+```
+
+CI draait dezelfde tests bij elke push via GitHub Actions (`.github/workflows/test.yml`).
 
 ## Hosten op GitHub Pages
 

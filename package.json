@@ -1,0 +1,10 @@
+{
+  "name": "infra-inplanting",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Client-side kaarttool voor camera- en infra-inplanting (GitHub Pages).",
+  "type": "commonjs",
+  "scripts": {
+    "test": "node --test"
+  }
+}

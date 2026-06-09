@@ -107,6 +107,8 @@
   .dimlbl.big{font-size:11px;color:#ffd479}
   body.hidedims .dimlbl{display:none}
   .wallpath{filter:drop-shadow(0 0 1.6px rgba(0,0,0,.9))}
+  .txtlbl{background:rgba(10,14,17,.72);color:#fff;font:700 11px var(--sans);padding:2px 7px;border-radius:6px;white-space:nowrap;border:1px solid rgba(255,255,255,.2);transform:translate(-50%,-50%);position:absolute;left:6px;top:6px}
+  .txtlbl.sel{border-color:var(--amber);color:#ffd479}
 
   .floatbar{position:absolute;bottom:16px;left:16px;z-index:1100;background:var(--panel);border:1px solid var(--line);
     border-radius:10px;padding:10px 12px;display:flex;gap:10px;align-items:center;font-size:12px;flex-wrap:wrap;max-width:calc(100% - 32px)}
@@ -168,6 +170,7 @@
     <button class="btn" id="parcelBtn" title="Klik een perceel → GRB-kadastergrens als terrein + oppervlakte (Vlaanderen)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 7l8-4 10 4-1 13-15 1z"/></svg>Perceel</button>
     <button class="btn" id="wallBtn" title="Teken muren / binnenindeling (plattegrond)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="1"/><path d="M3 10h7M10 3v7M14 21V10M21 14h-7"/></svg>Binnen</button>
     <button class="btn" id="measBtn" title="Meet een afstand op de kaart"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 16l13-13 5 5L8 21z"/><path d="M8 8l2 2M11 5l2 2M14 11l2 2M5 13l2 2"/></svg>Meet</button>
+    <button class="btn" id="txtBtn" title="Plaats een tekst / kamernaam op het plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7V5h16v2M9 19h6M12 5v14"/></svg>Tekst</button>
     <button class="btn" id="boundBtn" title="Teken de terreingrens"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7l8-4 8 4-8 4-8-4z"/><path d="M4 7v10l8 4 8-4V7"/></svg>Terrein</button>
     <button class="btn" id="anaBtn" title="Dekkingsanalyse camera's: gaten rood, overlap groen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Analyse</button>
     <button class="btn" id="csvBtn" title="Toestel- en kabellijst exporteren"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 17v-6M12 17v-2M15 17v-4"/><path d="M14 3H6a2 2 0 00-2 2v14a2 2 0 002 2h12a2 2 0 002-2V9z"/><path d="M14 3v6h6"/></svg>CSV</button>
@@ -306,39 +309,74 @@ function drawHandle(c){
     c._h.on('dragend',()=>scheduleSave());
   }else c._h.setLatLng(pos);
 }
-function renderAll(){cams.forEach(renderCam);links.forEach(renderLink);refreshList();updateLegend();}
+function renderAll(){cams.forEach(renderCam);links.forEach(renderLink);labels.forEach(renderLabel);refreshList();updateLegend();}
 
 /* ---------- links (verbindingen) ---------- */
 function renderLink(k){
   const a=byId(k.a), b=byId(k.b);
-  if(!a||!b){if(k._l){map.removeLayer(k._l);k._l=null;}return;}
+  if(!a||!b){if(k._l){map.removeLayer(k._l);k._l=null;}if(k._dim){map.removeLayer(k._dim);k._dim=null;}return;}
   const pts=[[a.lat,a.lng],[b.lat,b.lng]];
   if(!k._l){k._l=L.polyline(pts,{weight:3,interactive:true}).addTo(map);
     k._l.on('click',e=>{selectLink(k.id);L.DomEvent.stop(e);});}
   else k._l.setLatLngs(pts);
-  const on=k.id===selLink;
-  k._l.setStyle({color:on?'#ffb020':'#cdd7df',weight:on?5:3,opacity:on?1:.85,dashArray:on?null:'2 6'});
+  const on=k.id===selLink, col=on?'#ffb020':(CABLES[k.type]||CABLES.other).col;
+  k._l.setStyle({color:col,weight:on?5:3,opacity:.95,dashArray:null});
   k._l.bringToBack();
+  const d=mDist([a.lat,a.lng],[b.lat,b.lng]),mid=[(a.lat+b.lat)/2,(a.lng+b.lng)/2];
+  const ic=L.divIcon({className:'',iconSize:[48,14],iconAnchor:[24,7],html:`<div class="dimlbl">${d.toFixed(1)} m</div>`});
+  if(!k._dim)k._dim=L.marker(mid,{interactive:false,keyboard:false,icon:ic}).addTo(map);
+  else{k._dim.setLatLng(mid);k._dim.setIcon(ic);}
 }
 function updateLinksFor(c){links.forEach(k=>{if(k.a===c.id||k.b===c.id)renderLink(k);});}
-function selectLink(id){if(editingBoundary)stopBoundaryEdit();clearHandles();
+function selectLink(id){if(editingBoundary)stopBoundaryEdit();clearHandles();killBar();
   if(selWall){selWall=null;walls.forEach(w=>w._l&&w._l.setStyle(wallStyle(false)));}
-  selLink=id;sel=null;syncEditor();refreshList();links.forEach(renderLink);
-  const k=byLink(id),a=byId(k.a),b=byId(k.b);
-  floatBar('Verbinding '+(a?a.label:'?')+' — '+(b?b.label:'?')+' · ',
-    [['Verwijder',()=>{delLink(id);killBar();}],['Sluit',()=>{selLink=null;links.forEach(renderLink);killBar();}]]);}
-function delLink(id){const k=byLink(id);if(k&&k._l)map.removeLayer(k._l);links=links.filter(x=>x.id!==id);if(selLink===id)selLink=null;refreshList();scheduleSave();}
+  if(selLabel){selLabel=null;labels.forEach(renderLabel);}
+  selLink=id;sel=null;refreshList();links.forEach(renderLink);syncEditor();}
+function renderLinkEditor(ed){const k=byLink(selLink);if(!k){ed.innerHTML='';return;}
+  const a=byId(k.a),b=byId(k.b),d=(a&&b)?mDist([a.lat,a.lng],[b.lat,b.lng]):0;
+  ed.innerHTML=`<div class="ed">
+    <div class="row"><label>Kabel</label><div style="font:700 13px var(--mono);color:var(--ink)">${a?a.label:'?'} — ${b?b.label:'?'} · ${d.toFixed(1)} m</div></div>
+    <div class="row"><label>Type</label><div class="seg">
+      ${Object.entries(CABLES).map(([key,v])=>`<button data-c="${key}" style="${(k.type||'utp')===key?'background:'+v.col+';border-color:'+v.col+';color:#04201d':''}">${v.name}</button>`).join('')}
+    </div></div>
+    <div class="edbtns"><button class="btn" id="lkDel" style="color:#ffb4ad">Verwijder kabel</button></div></div>`;
+  ed.querySelectorAll('.seg button').forEach(btn=>btn.onclick=()=>{k.type=btn.dataset.c;renderLink(k);renderLinkEditor(ed);refreshList();scheduleSave();});
+  $("lkDel").onclick=()=>delLink(selLink);}
+function delLink(id){const k=byLink(id);if(k&&k._l)map.removeLayer(k._l);if(k&&k._dim)map.removeLayer(k._dim);links=links.filter(x=>x.id!==id);if(selLink===id){selLink=null;syncEditor();}refreshList();scheduleSave();}
 const byLink=id=>links.find(k=>k.id===id);
 function linkCount(id){return links.filter(k=>k.a===id||k.b===id).length;}
 function onLinkPick(id){
   if(linkA===null){linkA=id;toast('Eerste toestel gekozen — klik het tweede');return;}
   if(id===linkA){linkA=null;toast('Geannuleerd');return;}
   if(!links.some(k=>(k.a===linkA&&k.b===id)||(k.a===id&&k.b===linkA))){
-    const k={id:uid(),a:linkA,b:id};links.push(k);renderLink(k);refreshList();scheduleSave();
+    const k={id:uid(),a:linkA,b:id,type:'utp'};links.push(k);renderLink(k);refreshList();scheduleSave();
     const a=byId(linkA),b=byId(id);toast('Verbinding '+a.label+' — '+b.label+' gemaakt');}
   else toast('Die verbinding bestaat al');
   linkA=null;
 }
+
+/* ---------- tekst / kamerlabels ---------- */
+function makeLabelIcon(t){return L.divIcon({className:'',iconSize:[12,12],iconAnchor:[6,6],
+  html:`<div class="txtlbl ${t.id===selLabel?'sel':''}">${esc(t.text||'')}</div>`});}
+function renderLabel(t){
+  if(!t._m){t._m=L.marker([t.lat,t.lng],{icon:makeLabelIcon(t),draggable:true,zIndexOffset:900}).addTo(map);
+    t._m.on('click',e=>{selectLabel(t.id);L.DomEvent.stop(e);});
+    t._m.on('drag',()=>{const ll=t._m.getLatLng();t.lat=ll.lat;t.lng=ll.lng;});
+    t._m.on('dragend',scheduleSave);
+  }else{t._m.setLatLng([t.lat,t.lng]);t._m.setIcon(makeLabelIcon(t));}}
+function addLabel(ll){const t={id:uid(),text:'Naam',lat:ll.lat,lng:ll.lng};labels.push(t);renderLabel(t);selectLabel(t.id);scheduleSave();toast('Tekst geplaatst — typ de naam in het paneel');}
+function selectLabel(id){if(editingBoundary)stopBoundaryEdit();clearHandles();killBar();
+  sel=null;selLink=null;if(selWall){selWall=null;walls.forEach(w=>w._l&&w._l.setStyle(wallStyle(false)));}
+  selLabel=id;labels.forEach(renderLabel);refreshList();syncEditor();
+  setTimeout(()=>{const el=$("txtInput");if(el){el.focus();el.select();}},30);}
+function renderLabelEditor(ed){const t=labels.find(x=>x.id===selLabel);if(!t){ed.innerHTML='';return;}
+  ed.innerHTML=`<div class="ed">
+    <div class="row"><label>Tekst / kamernaam</label><input type="text" id="txtInput" value="${(t.text||'').replace(/"/g,'&quot;')}" placeholder="bv. Serverruimte"></div>
+    <div class="edbtns"><button class="btn" id="txtDel" style="color:#ffb4ad">Verwijder</button></div></div>`;
+  $("txtInput").oninput=e=>{t.text=e.target.value;t._m.setIcon(makeLabelIcon(t));scheduleSave();};
+  $("txtDel").onclick=()=>delLabel(selLabel);}
+function delLabel(id){const t=labels.find(x=>x.id===id);if(t&&t._m)map.removeLayer(t._m);labels=labels.filter(x=>x.id!==id);if(selLabel===id){selLabel=null;syncEditor();}refreshList();scheduleSave();}
+$("txtBtn").onclick=()=>{ if(mode==='text'){setMode('idle');return;} setMode('text');$("txtBtn").classList.add('active');toast('Klik op de kaart om een tekstlabel te plaatsen'); };
 
 /* ---------- device ops ---------- */
 function labelFor(kind){if(kind==='camera')return 'C'+String(counters.camera++).padStart(2,'0');
@@ -380,7 +418,10 @@ function refreshList(){
   w.querySelectorAll('.cam').forEach(d=>d.onclick=()=>{select(d.dataset.id);const c=byId(d.dataset.id);map.panTo([c.lat,c.lng]);});
 }
 function syncEditor(valuesOnly){
-  const c=byId(sel),ed=$("editor");if(!c){ed.innerHTML="";return;}
+  const ed=$("editor");
+  if(!valuesOnly&&selLabel){renderLabelEditor(ed);return;}
+  if(!valuesOnly&&selLink){renderLinkEditor(ed);return;}
+  const c=byId(sel);if(!c){ed.innerHTML="";return;}
   if(valuesOnly){const vr=$("vRange"),vd=$("vDir"),er=$("eRange"),edd=$("eDir");
     if(vr)vr.textContent=c.range+' m';if(er)er.value=c.range;if(vd)vd.textContent=c.dir+'° '+compName(c.dir);if(edd)edd.value=c.dir;refreshList();return;}
   if(isCam(c)){
@@ -443,16 +484,21 @@ function setMode(m){
   if(m!=='measure'&&$("measBtn").classList.contains('active'))$("measBtn").classList.remove('active');
   if(m!=='gebouw'&&$("bldgBtn").classList.contains('active'))$("bldgBtn").classList.remove('active');
   if(m!=='perceel'&&$("parcelBtn").classList.contains('active'))$("parcelBtn").classList.remove('active');
+  if(m!=='text'&&$("txtBtn").classList.contains('active'))$("txtBtn").classList.remove('active');
   mode=m;$("plaatsBtn").classList.toggle('active',m==='add');
-  map._container.style.cursor=(m==='add'||m==='terrein'||m==='link'||m==='wall'||m==='measure'||m==='gebouw'||m==='perceel')?'crosshair':'';}
+  map._container.style.cursor=(m==='add'||m==='terrein'||m==='link'||m==='wall'||m==='measure'||m==='gebouw'||m==='perceel'||m==='text')?'crosshair':'';}
 map.on('click',e=>{if(mode==='add'){addNode(addKind,e.latlng);setMode('idle');}
   else if(mode==='terrein'){addVertex(e.latlng);}
   else if(mode==='wall'){addWallPoint(e.latlng,e.originalEvent.shiftKey);}
   else if(mode==='measure'){addMeasurePoint(e.latlng);}
   else if(mode==='gebouw'){fetchBuilding(e.latlng);}
   else if(mode==='perceel'){fetchParcel(e.latlng);}
-  else{if(selLink!==null){selLink=null;links.forEach(renderLink);killBar();}
-    if(selWall!==null){selWall=null;walls.forEach(w=>w._l.setStyle(wallStyle(false)));clearHandles();killBar();}}});
+  else if(mode==='text'){addLabel(e.latlng);setMode('idle');}
+  else{let changed=false;
+    if(selLink!==null){selLink=null;links.forEach(renderLink);killBar();changed=true;}
+    if(selWall!==null){selWall=null;walls.forEach(w=>w._l.setStyle(wallStyle(false)));clearHandles();killBar();changed=true;}
+    if(selLabel!==null){selLabel=null;labels.forEach(renderLabel);changed=true;}
+    if(changed)syncEditor();}});
 map.on('dblclick',e=>{if(mode==='wall'){L.DomEvent.stop(e);newWallRun();}});
 
 /* link mode */
@@ -478,7 +524,7 @@ function updateLegend(){
   if(used.has('camera'))rows.push(['#2f7fe0',TYPES.fixed.icon,'Camera']);
   Object.entries(KINDS).forEach(([k,v])=>{if(used.has(k))rows.push([v.col,v.icon,v.name]);});
   box.innerHTML='<h4>Legende</h4>'+rows.map(([col,icon,name])=>`<div class="lr"><span class="ls" style="background:${col}">${icon}</span>${name}</div>`).join('')
-    +(links.length?'<div class="lr"><span style="width:14px;height:0;border-top:3px solid #cdd7df;flex:none"></span>Bekabeling</div>':'')
+    +[...new Set(links.map(k=>k.type||'utp'))].map(ct=>{const v=CABLES[ct]||CABLES.other;return `<div class="lr"><span style="width:14px;height:0;border-top:3px solid ${v.col};flex:none"></span>${v.name}</div>`;}).join('')
     +(walls.length?'<div class="lr"><span style="width:14px;height:0;border-top:3px solid #eef3f6;flex:none"></span>Muren</div>':'');
   box.classList.add('show');
 }
@@ -767,8 +813,14 @@ $("csvBtn").onclick=()=>{
     rows.push([c.label,soortName(c),c.lat.toFixed(6),c.lng.toFixed(6),
       cam?(dome?'':c.dir):'',cam?(dome?'360°':compName(c.dir)):'',cam?(dome?360:c.fov):'',cam?c.range:'',
       fmtH(c.h),linkCount(c.id),(c.note||'').replace(/[;\r\n]/g,' ')].join(sep));});
-  if(links.length){rows.push('');rows.push('# Verbindingen (bekabeling)');rows.push(['Van','Naar'].join(sep));
-    links.forEach(k=>{const a=byId(k.a),b=byId(k.b);if(a&&b)rows.push([a.label,b.label].join(sep));});}
+  if(links.length){rows.push('');
+    const ctot={};let lentot=0;
+    links.forEach(k=>{const a=byId(k.a),b=byId(k.b);if(!a||!b)return;const d=mDist([a.lat,a.lng],[b.lat,b.lng]);
+      const nm=(CABLES[k.type]||CABLES.other).name;ctot[nm]=(ctot[nm]||0)+d;lentot+=d;});
+    rows.push('# Totale kabellengte m'+sep+Math.round(lentot));
+    Object.entries(ctot).forEach(([t,mm])=>rows.push('# '+t+' m'+sep+Math.round(mm)));
+    rows.push('# Verbindingen (bekabeling)');rows.push(['Van','Naar','Type','Lengte_m'].join(sep));
+    links.forEach(k=>{const a=byId(k.a),b=byId(k.b);if(a&&b)rows.push([a.label,b.label,(CABLES[k.type]||CABLES.other).name,mDist([a.lat,a.lng],[b.lat,b.lng]).toFixed(1)].join(sep));});}
   const blob=new Blob(['﻿'+rows.join('\r\n')],{type:'text/csv;charset=utf-8'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='infra-inplanting.csv';a.click();
   toast('CSV geëxporteerd ('+cams.length+' toestellen, '+links.length+' kabels)');
@@ -783,6 +835,7 @@ function exportSVG(){
   cams.forEach(c=>{allLL.push([c.lat,c.lng]);if(isCam(c)){const cp=conePts(c);if(cp)cp.forEach(p=>allLL.push(p));
     else allLL.push(dest(c.lat,c.lng,0,c.range),dest(c.lat,c.lng,180,c.range),dest(c.lat,c.lng,90,c.range),dest(c.lat,c.lng,270,c.range));}});
   boundary.forEach(p=>allLL.push(p));
+  labels.forEach(t=>allLL.push([t.lat,t.lng]));
   if(!allLL.length){toast('Niets om te exporteren — teken eerst een plattegrond');return;}
   let minLa=90,maxLa=-90,minLo=180,maxLo=-180;
   allLL.forEach(([la,lo])=>{minLa=Math.min(minLa,la);maxLa=Math.max(maxLa,la);minLo=Math.min(minLo,lo);maxLo=Math.max(maxLo,lo);});
@@ -792,6 +845,7 @@ function exportSVG(){
   const W=Math.round(wM*ppm)+2*M, H=Math.round(hM*ppm)+2*M+TOP;
   const X=lo=>M+(lo-minLo)*mLo*ppm, Y=la=>TOP+M+(maxLa-la)*mLa*ppm;
   const proj=([la,lo])=>X(lo).toFixed(1)+','+Y(la).toFixed(1);
+  const showDims=$("lDims").checked;
   let s=`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" font-family="system-ui,Segoe UI,sans-serif">`;
   s+=`<rect width="${W}" height="${H}" fill="#ffffff"/>`;
   // title
@@ -805,10 +859,12 @@ function exportSVG(){
   cams.forEach(c=>{if(!isCam(c))return;const col=TYPES[c.type].col;
     if(c.type==='dome'&&c.fov>=360)s+=`<circle cx="${X(c.lng).toFixed(1)}" cy="${Y(c.lat).toFixed(1)}" r="${(c.range*ppm).toFixed(1)}" fill="${col}" fill-opacity="0.13" stroke="${col}" stroke-opacity="0.5" stroke-width="1"/>`;
     else s+=`<polygon points="${conePts(c).map(proj).join(' ')}" fill="${col}" fill-opacity="0.13" stroke="${col}" stroke-opacity="0.5" stroke-width="1"/>`;});
-  // links
-  links.forEach(k=>{const a=byId(k.a),b=byId(k.b);if(a&&b)s+=`<line x1="${X(a.lng).toFixed(1)}" y1="${Y(a.lat).toFixed(1)}" x2="${X(b.lng).toFixed(1)}" y2="${Y(b.lat).toFixed(1)}" stroke="#8b97a1" stroke-width="2" stroke-dasharray="2 5"/>`;});
+  // links (bekabeling, kleur per type)
+  links.forEach(k=>{const a=byId(k.a),b=byId(k.b);if(!a||!b)return;const col=(CABLES[k.type]||CABLES.other).col;
+    s+=`<line x1="${X(a.lng).toFixed(1)}" y1="${Y(a.lat).toFixed(1)}" x2="${X(b.lng).toFixed(1)}" y2="${Y(b.lat).toFixed(1)}" stroke="${col}" stroke-width="2"/>`;
+    if(showDims){const mx=(X(a.lng)+X(b.lng))/2,my=(Y(a.lat)+Y(b.lat))/2;
+      s+=`<text x="${mx.toFixed(1)}" y="${(my-3).toFixed(1)}" text-anchor="middle" font-size="8" fill="#1c2733" paint-order="stroke" stroke="#ffffff" stroke-width="2.5">${mDist([a.lat,a.lng],[b.lat,b.lng]).toFixed(1)} m</text>`;}});
   // walls + maatlabels
-  const showDims=$("lDims").checked;
   walls.forEach(w=>{s+=`<polyline points="${w.pts.map(proj).join(' ')}" fill="none" stroke="#1c2733" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round"/>`;
     if(showDims)for(let i=1;i<w.pts.length;i++){const a=w.pts[i-1],b=w.pts[i];
       const mx=(X(a[1])+X(b[1]))/2, my=(Y(a[0])+Y(b[0]))/2;
@@ -819,6 +875,9 @@ function exportSVG(){
     s+=`<g><rect x="${(x-SZ/2).toFixed(1)}" y="${(y-SZ/2).toFixed(1)}" width="${SZ}" height="${SZ}" rx="5" fill="${col}" stroke="rgba(0,0,0,.45)" stroke-width="1.5"/>`;
     s+=`<g transform="translate(${(x-SZ/2+3).toFixed(1)},${(y-SZ/2+3).toFixed(1)}) scale(${((SZ-6)/24).toFixed(3)})" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${innerOf(devIcon(c))}</g>`;
     s+=`<text x="${x.toFixed(1)}" y="${(y+SZ/2+11).toFixed(1)}" text-anchor="middle" font-size="10" font-weight="700" fill="#11161a" paint-order="stroke" stroke="#ffffff" stroke-width="3" stroke-linejoin="round">${esc(c.label)}</text></g>`;});
+  // tekstlabels
+  labels.forEach(t=>{const x=X(t.lng),y=Y(t.lat);
+    s+=`<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="middle" dominant-baseline="middle" font-size="12" font-weight="700" fill="#11161a" paint-order="stroke" stroke="#ffffff" stroke-width="3.5">${esc(t.text||'')}</text>`;});
   // scale bar
   let sm=[1,2,5,10,20,50,100].find(v=>v*ppm>=90)||100;const sx=M,sy=H-26,sw=sm*ppm;
   s+=`<line x1="${sx}" y1="${sy}" x2="${(sx+sw).toFixed(1)}" y2="${sy}" stroke="#11161a" stroke-width="2"/>`;
@@ -850,15 +909,19 @@ function state(){const c=map.getCenter();return{c:[+c.lat.toFixed(6),+c.lng.toFi
   bnd:boundary.map(p=>[+p[0].toFixed(6),+p[1].toFixed(6)]),
   cams:cams.map(x=>({k:x.kind,l:x.label,la:+x.lat.toFixed(6),lo:+x.lng.toFixed(6),d:x.dir,f:x.fov,r:x.range,t:x.type,h:x.h,no:x.note||''})),
   lk:links.map(k=>[cams.findIndex(c=>c.id===k.a),cams.findIndex(c=>c.id===k.b)]).filter(p=>p[0]>=0&&p[1]>=0),
-  wl:walls.map(w=>w.pts.map(p=>[+p[0].toFixed(6),+p[1].toFixed(6)])),pk:parcelCapakey||undefined};}
+  wl:walls.map(w=>w.pts.map(p=>[+p[0].toFixed(6),+p[1].toFixed(6)])),pk:parcelCapakey||undefined,
+  lt:links.map(k=>k.type||'utp'),
+  tx:labels.map(t=>({t:t.text,la:+t.lat.toFixed(6),lo:+t.lng.toFixed(6)}))};}
 function restore(s){if(!s)return;
   [...cams].forEach(c=>[c._m,c._c,c._h].forEach(l=>l&&map.removeLayer(l)));cams=[];
-  links.forEach(k=>k._l&&map.removeLayer(k._l));links=[];sel=null;selLink=null;
+  links.forEach(k=>{k._l&&map.removeLayer(k._l);k._dim&&map.removeLayer(k._dim);});links=[];sel=null;selLink=null;
+  labels.forEach(t=>t._m&&map.removeLayer(t._m));labels=[];selLabel=null;
   walls.forEach(w=>w._l&&map.removeLayer(w._l));walls=[];selWall=null;curWall=null;
   Object.assign(counters,{camera:1,switch:1,rack:1,entry:1,ap:1},s.ct||(s.n?{camera:s.n}:{}));
   (s.cams||[]).forEach(x=>{const kind=x.k||'camera';const c={id:uid(),kind,label:x.l,lat:x.la,lng:x.lo,h:x.h,note:x.no||''};
     if(kind==='camera')Object.assign(c,{type:x.t||'fixed',dir:x.d,fov:x.f,range:x.r});cams.push(c);});
-  (s.lk||[]).forEach(([i,j])=>{if(cams[i]&&cams[j])links.push({id:uid(),a:cams[i].id,b:cams[j].id});});
+  (s.lk||[]).forEach(([i,j],idx)=>{if(cams[i]&&cams[j])links.push({id:uid(),a:cams[i].id,b:cams[j].id,type:(s.lt&&s.lt[idx])||'utp'});});
+  (s.tx||[]).forEach(x=>{labels.push({id:uid(),text:x.t,lat:x.la,lng:x.lo});});
   (s.wl||[]).forEach(pts=>{if(pts&&pts.length>=2){const w={id:uid(),pts:pts.map(p=>[p[0],p[1]]),_dims:[],_l:L.polyline(pts,wallStyle(false)).addTo(map)};
     w._l.on('click',e=>{selectWall(w.id);L.DomEvent.stop(e);});walls.push(w);addWallDims(w);}});
   if(s.c)map.setView(s.c,s.z||18);
@@ -903,7 +966,7 @@ window.addEventListener('keydown',e=>{const inInput=document.activeElement.tagNa
     if(e.key==='Escape'){typedLen='';finishWall();return;}
     return;}
   if((e.key==='Delete'||e.key==='Backspace')&&!inInput){
-    if(selLink){delLink(selLink);}else if(selWall){delWall(selWall);}else if(sel){delCam(sel);}}
+    if(selLabel){delLabel(selLabel);}else if(selLink){delLink(selLink);}else if(selWall){delWall(selWall);}else if(sel){delCam(sel);}}
   if(e.key==='Escape'){if(mode==='link')endLink();$("plaatsMenu").classList.remove('show');}});
 
 /* ---------- init: URL hash > localStorage ---------- */
