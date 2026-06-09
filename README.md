@@ -1,19 +1,25 @@
-# Camera-inplanting · kaarttool
+# Infra-inplanting · kaarttool
 
-Een volledig client-side web-app waarmee je beveiligingscamera's op een echte luchtfoto-kaart kan
-inplannen, de dekking kan analyseren en het resultaat kan delen en exporteren. Geen backend, geen
-build-stap, geen API-sleutels — één `index.html`, klaar voor **GitHub Pages**.
+Een volledig client-side web-app waarmee je beveiligingscamera's én netwerk-infrastructuur op een
+echte luchtfoto-kaart kan inplannen, de bekabeling kan tonen, de camera-dekking kan analyseren en
+het resultaat kan delen en exporteren. Geen backend, geen build-stap, geen API-sleutels — één
+`index.html`, klaar voor **GitHub Pages**.
 
 ## Wat ze doet
 
 - **Adres zoeken** (Geopunt-geocoder) → live luchtfoto verschijnt. Geen upload nodig.
 - **Kaartlagen**: Esri luchtfoto (wereld), Vlaanderen 15 cm orthofoto, OSM, en GRB-kadaster als overlay.
-- **Camera's plaatsen**: klik op de kaart, sleep om te verplaatsen, sleep het oranje punt om te
-  richten + bereik in te stellen. Types: vast/bullet, dome (360°), PTZ. FOV-kegel in echte meters.
-- **Terrein tekenen** → **dekkingsanalyse**: blinde vlekken (rood), overlap ≥2 cam's (groen), met
-  percentages en geschatte oppervlakte.
+- **Toestellen plaatsen** via *Plaats ▾*: camera's (vast/bullet, dome 360°, PTZ), netwerkswitches,
+  patchkasten/racks, nuts-/kabelintredepunten en WiFi access points. Elk met een montagehoogte en
+  een vrije notitie ("waar komt wat binnen").
+- **Camera's richten**: sleep het oranje punt om richting + bereik in te stellen; FOV-kegel in echte meters.
+- **Bekabeling**: knop *Verbind* → klik twee toestellen om ze met een lijn te verbinden (toont wat
+  met wat verbindt). Verbindingen verschuiven mee als je een toestel versleept.
+- **Terrein tekenen** → **dekkingsanalyse** (camera's): blinde vlekken (rood), overlap ≥2 cam's
+  (groen), met percentages en geschatte oppervlakte.
+- **Legende** in/uitschakelen om aan anderen uit te leggen wat elk symbool betekent.
 - **Delen**: knop *Deel* kopieert een link met het volledige plan in de URL.
-- **Exporteren**: CSV-cameralijst voor de offerte, JSON (export/import), PDF via print.
+- **Exporteren**: CSV (toestel- + kabellijst voor de offerte), JSON (export/import), PDF via print.
 - Auto-opslaan in de browser (localStorage).
 
 ## Lokaal openen
