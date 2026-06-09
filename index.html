@@ -705,7 +705,7 @@ async function fetchBuilding(ll){
 }
 function addBuilding(f){
   let area=0,first=null;
-  geoPolys(f.geometry).forEach(poly=>{const ring=poly[0];const pts=ring.map(([lo,la])=>[la,lo]);
+  geoPolys(f.geometry).forEach(poly=>{const ring=poly[0];const pts=simplifyCollinear(ring.map(([lo,la])=>[la,lo]),true);
     const w={id:uid(),pts,_dims:[],_l:L.polyline(pts,wallStyle(false)).addTo(map)};
     w._l.on('click',e=>{selectWall(w.id);L.DomEvent.stop(e);});walls.push(w);addWallDims(w);
     area+=polygonAreaM2(pts);if(!first)first=pts;});
@@ -732,7 +732,7 @@ async function fetchParcel(ll){
   }catch(err){toast('Ophalen mislukt (netwerk?)');}
 }
 function setParcelTerrein(f){
-  const ring=geoPolys(f.geometry)[0][0];let pts=ring.map(([lo,la])=>[la,lo]);
+  const ring=geoPolys(f.geometry)[0][0];let pts=simplifyCollinear(ring.map(([lo,la])=>[la,lo]),true);
   if(pts.length>1&&Math.abs(pts[0][0]-pts[pts.length-1][0])<1e-9&&Math.abs(pts[0][1]-pts[pts.length-1][1])<1e-9)pts=pts.slice(0,-1);
   clearBoundary();boundary=pts;parcelCapakey=(f.properties&&f.properties.CAPAKEY)||null;drawBoundary();
   map.fitBounds(bLayer.getBounds(),{maxZoom:21,padding:[60,60]});

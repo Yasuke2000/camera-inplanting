@@ -40,6 +40,31 @@ function geoPolys(geom){return geom.type==='MultiPolygon'?geom.coordinates:[geom
 function geoContains(geom,lon,lat){for(const poly of geoPolys(geom)){if(ptInRing(lon,lat,poly[0])){
   let hole=false;for(let h=1;h<poly.length;h++)if(ptInRing(lon,lat,poly[h])){hole=true;break;}if(!hole)return true;}}return false;}
 
+/* Voeg bijna-rechte (collineaire) opeenvolgende punten samen: een hoekpunt waar de
+   richting <tolDeg° afwijkt van recht-door wordt weggelaten. pts = [[lat,lng],...].
+   closed=true behandelt het als gesloten ring (bv. gebouw/perceel) en behoudt de sluitpunt. */
+function simplifyCollinear(pts,closed,tolDeg){
+  tolDeg=(tolDeg==null)?5:tolDeg;
+  if(pts.length<3)return pts.slice();
+  const same=(a,b)=>Math.abs(a[0]-b[0])<1e-9&&Math.abs(a[1]-b[1])<1e-9;
+  let ring=pts.slice(),dup=false;
+  if(closed&&same(ring[0],ring[ring.length-1])){ring.pop();dup=true;}
+  const n=ring.length;
+  if(n<3)return pts.slice();
+  const keep=new Array(n).fill(true);
+  for(let i=0;i<n;i++){
+    if(!closed&&(i===0||i===n-1))continue;
+    const prev=ring[(i-1+n)%n],cur=ring[i],next=ring[(i+1)%n];
+    const b1=bearing({lat:prev[0],lng:prev[1]},{lat:cur[0],lng:cur[1]});
+    const b2=bearing({lat:cur[0],lng:cur[1]},{lat:next[0],lng:next[1]});
+    if(angDiff(b1,b2)<tolDeg)keep[i]=false;
+  }
+  let out=ring.filter((_,i)=>keep[i]);
+  if(out.length<(closed?3:2))out=ring;            // veiligheid: niet overdreven inklappen
+  if(dup)out=out.concat([out[0].slice()]);
+  return out;
+}
+
 if(typeof module!=='undefined'&&module.exports){
-  module.exports={R,D2R,R2D,dest,bearing,COMP,compName,angDiff,polygonAreaM2,pointInPoly,ptInRing,geoPolys,geoContains};
+  module.exports={R,D2R,R2D,dest,bearing,COMP,compName,angDiff,polygonAreaM2,pointInPoly,ptInRing,geoPolys,geoContains,simplifyCollinear};
 }

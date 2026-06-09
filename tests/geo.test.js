@@ -81,6 +81,15 @@ test('geoPolys normaliseert Polygon en MultiPolygon', () => {
   assert.strictEqual(geo.geoPolys({ type: 'MultiPolygon', coordinates: [[[[0, 0]]], [[[1, 1]]]] }).length, 2);
 });
 
+test('simplifyCollinear verwijdert bijna-rechte punten, behoudt echte hoeken', () => {
+  // vierkant met een extra (collineair) middenpunt (0,1) op de eerste zijde
+  const ring = [[0, 0], [0, 1], [0, 2], [2, 2], [2, 0], [0, 0]]; // gesloten [lat,lng]
+  const out = geo.simplifyCollinear(ring, true);
+  assert.strictEqual(out.length, 5, '4 hoeken + sluitpunt'); // (0,1) verdwijnt
+  // open lijn met een echte hoek van 90° blijft volledig
+  assert.strictEqual(geo.simplifyCollinear([[0, 0], [0, 2], [2, 2]], false).length, 3);
+});
+
 test('index.html laadt geo.js en heeft één inline-script (refactor-regressie)', () => {
   const h = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
   assert.ok(h.includes('<script src="geo.js"></script>'), 'geo.js wordt ingeladen');
