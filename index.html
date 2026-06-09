@@ -106,6 +106,7 @@
   .dimlbl{background:rgba(10,14,17,.78);color:#eef3f6;font:700 9.5px var(--mono);padding:1px 4px;border-radius:4px;white-space:nowrap;text-align:center;border:1px solid rgba(255,255,255,.14)}
   .dimlbl.big{font-size:11px;color:#ffd479}
   body.hidedims .dimlbl{display:none}
+  .wallpath{filter:drop-shadow(0 0 1.6px rgba(0,0,0,.9))}
 
   .floatbar{position:absolute;bottom:16px;left:16px;z-index:1100;background:var(--panel);border:1px solid var(--line);
     border-radius:10px;padding:10px 12px;display:flex;gap:10px;align-items:center;font-size:12px;flex-wrap:wrap;max-width:calc(100% - 32px)}
@@ -207,9 +208,9 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
   integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script src="geo.js"></script>
 <script>
 const $=id=>document.getElementById(id);
-const R=6371000, D2R=Math.PI/180, R2D=180/Math.PI;
 const uid=()=>'n'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const fmtH=v=>(''+v).replace('.',',');
 
@@ -232,14 +233,7 @@ L.control.layers(baseLayers,overlays,{position:'topright'}).addTo(map);
 let activeBase='esri';
 map.on('baselayerchange',e=>{activeBase=e.name.includes('Vlaanderen')?'ortho':e.name.includes('OSM')?'osm':'esri';scheduleSave();});
 
-/* ---------- geometry helpers (real metres) ---------- */
-function dest(lat,lng,brng,d){const δ=d/R,θ=brng*D2R,φ1=lat*D2R,λ1=lng*D2R;
-  const φ2=Math.asin(Math.sin(φ1)*Math.cos(δ)+Math.cos(φ1)*Math.sin(δ)*Math.cos(θ));
-  const λ2=λ1+Math.atan2(Math.sin(θ)*Math.sin(δ)*Math.cos(φ1),Math.cos(δ)-Math.sin(φ1)*Math.sin(φ2));
-  return [φ2*R2D,((λ2*R2D+540)%360)-180];}
-function bearing(a,b){const φ1=a.lat*D2R,φ2=b.lat*D2R,Δλ=(b.lng-a.lng)*D2R;
-  const y=Math.sin(Δλ)*Math.cos(φ2),x=Math.cos(φ1)*Math.sin(φ2)-Math.sin(φ1)*Math.cos(φ2)*Math.cos(Δλ);
-  return (Math.atan2(y,x)*R2D+360)%360;}
+/* geometrie-helpers (dest, bearing, R, D2R, R2D) staan in geo.js */
 
 /* ---------- camera sub-types ---------- */
 const TYPES={
@@ -254,16 +248,18 @@ const KINDS={
   entry:{name:"Nuts-/kabelintrede",col:"#d24b6c",h:0.3,prefix:"IN",icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3h6v18h-6"/><path d="M3 12h11M10 8l4 4-4 4"/></svg>'},
   ap:{name:"Access point",col:"#45b0c0",h:3,prefix:"AP",icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12a7 7 0 0114 0"/><path d="M8.5 14.5a3.5 3.5 0 017 0"/><circle cx="12" cy="18" r="1"/></svg>'}
 };
-const COMP=["N","NO","O","ZO","Z","ZW","W","NW"];
-const compName=d=>COMP[Math.round(((d%360)+360)%360/45)%8];
+/* COMP/compName staan in geo.js */
 const isCam=c=>c.kind==='camera';
 function soortName(c){return isCam(c)?TYPES[c.type].name+' camera':KINDS[c.kind].name;}
 function devCol(c){return isCam(c)?TYPES[c.type].col:KINDS[c.kind].col;}
 function devIcon(c){return isCam(c)?TYPES[c.type].icon:KINDS[c.kind].icon;}
+/* kabeltypes voor de bekabeling */
+const CABLES={utp:{name:'UTP/Cat6',col:'#5aa9ff'},fiber:{name:'Glasvezel',col:'#ffd479'},power:{name:'Stroom',col:'#e5564b'},other:{name:'Overig',col:'#cdd7df'}};
 
 let cams=[];            // all devices: {id,kind,label,lat,lng,h,note, type,dir,fov,range, _m,_c,_h}
-let links=[];           // {id,a,b,_l}
-let sel=null, selLink=null, addKind='camera', linkA=null, mode="idle";
+let links=[];           // {id,a,b,type,_l,_dim}
+let labels=[];          // {id,text,lat,lng,_m}
+let sel=null, selLink=null, selLabel=null, addKind='camera', linkA=null, mode="idle";
 const counters={camera:1,switch:1,rack:1,entry:1,ap:1};
 
 function makeIcon(c){
@@ -560,13 +556,11 @@ function finishBoundary(){
   $("boundBtn").classList.remove('active');map._container.style.cursor='';killBar();mode='idle';
 }
 function clearBoundary(){clearHandles();editingBoundary=false;[bLayer,bDraw,...bVtx].forEach(l=>l&&map.removeLayer(l));bLayer=bDraw=null;bVtx=[];boundary=[];parcelCapakey=null;}
-function pointInPoly(lat,lng,poly){let c=false;for(let i=0,j=poly.length-1;i<poly.length;j=i++){
-  const yi=poly[i][0],xi=poly[i][1],yj=poly[j][0],xj=poly[j][1];
-  if(((yi>lat)!==(yj>lat))&&(lng<(xj-xi)*(lat-yi)/(yj-yi)+xi))c=!c;}return c;}
+/* pointInPoly staat in geo.js */
 
 /* ---------- walls / floor plan (binnen) ---------- */
 let walls=[], curWall=null, selWall=null, wallPreview=null, wallTarget=null, typedLen='';
-const wallStyle=on=>({color:on?'#ffb020':'#eef3f6',weight:on?5:3.5,opacity:.96,lineCap:'round',lineJoin:'round'});
+const wallStyle=on=>({color:on?'#ffb020':'#f6fafc',weight:on?5:4,opacity:1,lineCap:'round',lineJoin:'round',className:'wallpath'});
 const mDist=(a,b)=>L.latLng(a[0],a[1]).distanceTo(L.latLng(b[0],b[1]));
 function wallTotal(){if(!curWall)return 0;let t=0;for(let i=1;i<curWall.pts.length;i++)t+=mDist(curWall.pts[i-1],curWall.pts[i]);return t;}
 function wallStatus(){const span=document.querySelector('#floatbar .t');if(!span)return;let txt;
@@ -580,10 +574,7 @@ function dimLabel(a,b){const mid=[(a[0]+b[0])/2,(a[1]+b[1])/2];
 function clearWallDims(w){if(w._dims){w._dims.forEach(m=>map.removeLayer(m));}w._dims=[];}
 function addWallDims(w){clearWallDims(w);if(!$("lDims").checked)return;for(let i=1;i<w.pts.length;i++){const m=dimLabel(w.pts[i-1],w.pts[i]);m.addTo(map);w._dims.push(m);}}
 function refreshDims(){walls.forEach(addWallDims);}
-/* spherical polygon area (m²) from [[lat,lng],...] */
-function polygonAreaM2(pts){const n=pts.length;if(n<3)return 0;let a=0;
-  for(let i=0;i<n;i++){const p1=pts[i],p2=pts[(i+1)%n];a+=(p2[1]-p1[1])*D2R*(2+Math.sin(p1[0]*D2R)+Math.sin(p2[0]*D2R));}
-  return Math.abs(a*R*R/2);}
+/* polygonAreaM2 staat in geo.js */
 function wallMetrics(w){let per=0;for(let i=1;i<w.pts.length;i++)per+=mDist(w.pts[i-1],w.pts[i]);
   return {per,area:polygonAreaM2(w.pts)};}
 const m2=v=>Math.round(v).toLocaleString('nl-BE')+' m²';
@@ -651,12 +642,7 @@ function addMeasurePoint(ll){measurePts.push([ll.lat,ll.lng]);
 const GRB_WFS='https://geo.api.vlaanderen.be/GRB/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=GRB:GBG&count=40&outputFormat=application/json&srsName=EPSG:4326&bbox=';
 $("bldgBtn").onclick=()=>{ if(mode==='gebouw'){setMode('idle');return;} setMode('gebouw');$("bldgBtn").classList.add('active');
   toast('Klik op een gebouw — de exacte GRB-omtrek wordt opgehaald (enkel Vlaanderen)'); };
-function ptInRing(x,y,ring){let c=false;for(let i=0,j=ring.length-1;i<ring.length;j=i++){
-  const xi=ring[i][0],yi=ring[i][1],xj=ring[j][0],yj=ring[j][1];
-  if(((yi>y)!==(yj>y))&&(x<(xj-xi)*(y-yi)/(yj-yi)+xi))c=!c;}return c;}
-function geoPolys(geom){return geom.type==='MultiPolygon'?geom.coordinates:[geom.coordinates];}
-function geoContains(geom,lon,lat){for(const poly of geoPolys(geom)){if(ptInRing(lon,lat,poly[0])){
-  let hole=false;for(let h=1;h<poly.length;h++)if(ptInRing(lon,lat,poly[h])){hole=true;break;}if(!hole)return true;}}return false;}
+/* ptInRing, geoPolys, geoContains staan in geo.js */
 function ringCentroid(ring){let x=0,y=0;ring.forEach(p=>{x+=p[0];y+=p[1];});return [x/ring.length,y/ring.length];}
 async function fetchBuilding(ll){
   setMode('idle');$("bldgBtn").classList.remove('active');
@@ -710,7 +696,6 @@ function setParcelTerrein(f){
 
 /* ---------- coverage analysis (camera's only) ---------- */
 let analysisOn=false, anaCanvas=null, anaCells=null, anaStep=4;
-function angDiff(a,b){const d=Math.abs(a-b)%360;return d>180?360-d:d;}
 function coverCount(lat,lng){let n=0;const p=L.latLng(lat,lng);
   for(const c of cams){if(!isCam(c))continue;const cc=L.latLng(c.lat,c.lng);if(cc.distanceTo(p)>c.range)continue;
     if(c.type==='dome'&&c.fov>=360){n++;continue;}
