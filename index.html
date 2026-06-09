@@ -468,7 +468,7 @@ function jsonp(url){return new Promise((res,rej)=>{const cb='gp'+Math.random().t
 let stmr;
 $("q").addEventListener('input',e=>{clearTimeout(stmr);const v=e.target.value.trim();
   if(v.length<3){$("sugg").classList.remove('show');return;}
-  stmr=setTimeout(async()=>{try{const d=await jsonp('https://loc.geopunt.be/v4/Suggestion?q='+encodeURIComponent(v)+'&c=6');
+  stmr=setTimeout(async()=>{try{const d=await jsonp('https://geo.api.vlaanderen.be/geolocation/v4/Suggestion?q='+encodeURIComponent(v)+'&c=6');
     const arr=(d&&d.SuggestionResult)||[];const box=$("sugg");
     box.innerHTML=arr.map(s=>`<div>${s}</div>`).join('');box.classList.toggle('show',arr.length>0);
     box.querySelectorAll('div').forEach(el=>el.onclick=()=>{$("q").value=el.textContent;$("sugg").classList.remove('show');geocode(el.textContent);});
@@ -476,7 +476,7 @@ $("q").addEventListener('input',e=>{clearTimeout(stmr);const v=e.target.value.tr
 $("q").addEventListener('keydown',e=>{if(e.key==='Enter'){$("sugg").classList.remove('show');geocode(e.target.value.trim());}});
 document.addEventListener('click',e=>{if(!e.target.closest('.search'))$("sugg").classList.remove('show');
   if(!e.target.closest('.menuwrap'))$("plaatsMenu").classList.remove('show');});
-async function geocode(q){if(!q)return;try{const d=await jsonp('https://loc.geopunt.be/v4/Location?q='+encodeURIComponent(q)+'&c=1');
+async function geocode(q){if(!q)return;try{const d=await jsonp('https://geo.api.vlaanderen.be/geolocation/v4/Location?q='+encodeURIComponent(q)+'&c=1');
   const r=d&&d.LocationResult&&d.LocationResult[0];if(r){map.setView([r.Location.Lat_WGS84,r.Location.Lon_WGS84],19);toast(r.FormattedAddress||q);}
   else toast('Adres niet gevonden');}catch{toast('Zoeken mislukt (netwerk?)');}}
 
