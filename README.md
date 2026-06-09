@@ -22,6 +22,10 @@ het resultaat kan delen en exporteren. Geen backend, geen build-stap, geen API-s
   hoekpunten. Tijdens het tekenen zie je de **lengte live**; **typ een getal + Enter** om een muur
   een exacte lengte te geven in de richting van de muis. **Dubbelklik** = aparte muur, **Enter** =
   klaar, **⌫** = laatste punt ongedaan. Maatlabels per segment staan op het plan (toggle *Maten tonen*).
+- **Gebouw automatisch omranden** via *Gebouw*: klik op een gebouw → de exacte **GRB-omtrek**
+  (Digitaal Vlaanderen, kadastraal) wordt als bemate contour getekend, met melding van het **type en
+  de oppervlakte (m²)**. Enkel Vlaanderen. Selecteer een contour om **omtrek + ingesloten
+  oppervlakte** te zien — zo controleer je of een afbakening klopt.
 - **Meten** via *Meet*: klik twee punten voor de afstand in meter.
 - **SVG-export** via *SVG*: een proper vectorplan (muren, toestellen, labels, kabels, terrein,
   schaalbalk, noordpijl) als `.svg` — schaalbaar en bewerkbaar voor IT-documentatie (Inkscape, Visio,
