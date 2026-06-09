@@ -15,9 +15,14 @@ het resultaat kan delen en exporteren. Geen backend, geen build-stap, geen API-s
 - **Camera's richten**: sleep het oranje punt om richting + bereik in te stellen; FOV-kegel in echte meters.
 - **Bekabeling**: knop *Verbind* → klik twee toestellen om ze met een lijn te verbinden (toont wat
   met wat verbindt). Verbindingen verschuiven mee als je een toestel versleept.
+- **Op ware schaal**: de luchtfoto is georefereerd, dus alle lengtes en afstanden zijn meteen in
+  echte meters (Vlaanderen-orthofoto tot ±15 cm). Geen kalibratie nodig.
 - **Plattegrond tekenen** via *Binnen*: klik punten om muren te tekenen. Haakse hoeken worden
   automatisch recht gezet (houd **Shift** voor vrij tekenen), punten klikken vast op bestaande
-  hoekpunten. **Dubbelklik** = aparte muur starten, **Enter** = klaar, **⌫** = laatste punt ongedaan.
+  hoekpunten. Tijdens het tekenen zie je de **lengte live**; **typ een getal + Enter** om een muur
+  een exacte lengte te geven in de richting van de muis. **Dubbelklik** = aparte muur, **Enter** =
+  klaar, **⌫** = laatste punt ongedaan. Maatlabels per segment staan op het plan (toggle *Maten tonen*).
+- **Meten** via *Meet*: klik twee punten voor de afstand in meter.
 - **SVG-export** via *SVG*: een proper vectorplan (muren, toestellen, labels, kabels, terrein,
   schaalbalk, noordpijl) als `.svg` — schaalbaar en bewerkbaar voor IT-documentatie (Inkscape, Visio,
   Word…). Voor een snelle kaart-met-luchtfoto blijft *PDF* (print) beschikbaar.
