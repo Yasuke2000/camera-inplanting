@@ -164,6 +164,7 @@
     </div>
     <button class="btn" id="linkBtn" title="Verbind twee toestellen met een kabel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007 0l3-3a5 5 0 00-7-7l-1 1"/><path d="M14 11a5 5 0 00-7 0l-3 3a5 5 0 007 7l1-1"/></svg>Verbind</button>
     <button class="btn" id="bldgBtn" title="Klik een gebouw → exacte GRB-omtrek + oppervlakte (Vlaanderen)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 21h18M5 21V7l7-4 7 4v14"/><path d="M10 21v-5h4v5"/></svg>Gebouw</button>
+    <button class="btn" id="parcelBtn" title="Klik een perceel → GRB-kadastergrens als terrein + oppervlakte (Vlaanderen)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 7l8-4 10 4-1 13-15 1z"/></svg>Perceel</button>
     <button class="btn" id="wallBtn" title="Teken muren / binnenindeling (plattegrond)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="1"/><path d="M3 10h7M10 3v7M14 21V10M21 14h-7"/></svg>Binnen</button>
     <button class="btn" id="measBtn" title="Meet een afstand op de kaart"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 16l13-13 5 5L8 21z"/><path d="M8 8l2 2M11 5l2 2M14 11l2 2M5 13l2 2"/></svg>Meet</button>
     <button class="btn" id="boundBtn" title="Teken de terreingrens"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7l8-4 8 4-8 4-8-4z"/><path d="M4 7v10l8 4 8-4V7"/></svg>Terrein</button>
@@ -441,13 +442,15 @@ function setMode(m){
   if(m!=='wall'&&(curWall||$("wallBtn").classList.contains('active'))){commitCurWall();$("wallBtn").classList.remove('active');map.doubleClickZoom.enable();if(wallPreview)wallPreview.setLatLngs([]);}
   if(m!=='measure'&&$("measBtn").classList.contains('active'))$("measBtn").classList.remove('active');
   if(m!=='gebouw'&&$("bldgBtn").classList.contains('active'))$("bldgBtn").classList.remove('active');
+  if(m!=='perceel'&&$("parcelBtn").classList.contains('active'))$("parcelBtn").classList.remove('active');
   mode=m;$("plaatsBtn").classList.toggle('active',m==='add');
-  map._container.style.cursor=(m==='add'||m==='terrein'||m==='link'||m==='wall'||m==='measure'||m==='gebouw')?'crosshair':'';}
+  map._container.style.cursor=(m==='add'||m==='terrein'||m==='link'||m==='wall'||m==='measure'||m==='gebouw'||m==='perceel')?'crosshair':'';}
 map.on('click',e=>{if(mode==='add'){addNode(addKind,e.latlng);setMode('idle');}
   else if(mode==='terrein'){addVertex(e.latlng);}
   else if(mode==='wall'){addWallPoint(e.latlng,e.originalEvent.shiftKey);}
   else if(mode==='measure'){addMeasurePoint(e.latlng);}
   else if(mode==='gebouw'){fetchBuilding(e.latlng);}
+  else if(mode==='perceel'){fetchParcel(e.latlng);}
   else{if(selLink!==null){selLink=null;links.forEach(renderLink);killBar();}
     if(selWall!==null){selWall=null;walls.forEach(w=>w._l.setStyle(wallStyle(false)));killBar();}}});
 map.on('dblclick',e=>{if(mode==='wall'){L.DomEvent.stop(e);newWallRun();}});
@@ -658,6 +661,33 @@ function addBuilding(f){
   toast('Gebouw toegevoegd: '+t+' · ±'+m2(area)+dt);
 }
 
+/* ---------- auto-afbakenen perceel (GRB ADP → terrein) ---------- */
+$("parcelBtn").onclick=()=>{ if(mode==='perceel'){setMode('idle');return;} setMode('perceel');$("parcelBtn").classList.add('active');
+  toast('Klik op een perceel — de GRB-kadastergrens wordt als terrein gezet (enkel Vlaanderen)'); };
+async function fetchParcel(ll){
+  setMode('idle');$("parcelBtn").classList.remove('active');
+  const d=0.0011,bbox=[(ll.lat-d).toFixed(7),(ll.lng-d).toFixed(7),(ll.lat+d).toFixed(7),(ll.lng+d).toFixed(7),'urn:ogc:def:crs:EPSG::4326'].join(',');
+  toast('Perceel ophalen…');
+  try{
+    const r=await fetch('https://geo.api.vlaanderen.be/GRB/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=GRB:ADP&count=40&outputFormat=application/json&srsName=EPSG:4326&bbox='+encodeURIComponent(bbox));
+    const j=await r.json();const feats=(j.features||[]).filter(f=>f.geometry);
+    if(!feats.length){toast('Geen perceel gevonden hier (GRB = enkel Vlaanderen)');return;}
+    let chosen=feats.find(f=>geoContains(f.geometry,ll.lng,ll.lat));
+    if(!chosen){let bd=1e18;feats.forEach(f=>{const c=ringCentroid(geoPolys(f.geometry)[0][0]);const dd=(c[0]-ll.lng)**2+(c[1]-ll.lat)**2;if(dd<bd){bd=dd;chosen=f;}});}
+    setParcelTerrein(chosen);
+  }catch(err){toast('Ophalen mislukt (netwerk?)');}
+}
+function setParcelTerrein(f){
+  const ring=geoPolys(f.geometry)[0][0];let pts=ring.map(([lo,la])=>[la,lo]);
+  if(pts.length>1&&Math.abs(pts[0][0]-pts[pts.length-1][0])<1e-9&&Math.abs(pts[0][1]-pts[pts.length-1][1])<1e-9)pts=pts.slice(0,-1);
+  clearBoundary();boundary=pts;
+  bLayer=L.polygon(boundary,{color:'#1fb6a6',weight:2,dashArray:'6 4',fill:true,fillOpacity:.04}).addTo(map);
+  map.fitBounds(bLayer.getBounds(),{maxZoom:21,padding:[60,60]});
+  scheduleSave();if(analysisOn)scheduleAnalysis();
+  const ck=(f.properties&&f.properties.CAPAKEY)||'';
+  toast('Perceel als terrein gezet'+(ck?' · '+ck:'')+' · ±'+m2(polygonAreaM2(pts)));
+}
+
 /* ---------- coverage analysis (camera's only) ---------- */
 let analysisOn=false, anaCanvas=null, anaCells=null, anaStep=4;
 function angDiff(a,b){const d=Math.abs(a-b)%360;return d>180?360-d:d;}
@@ -856,7 +886,7 @@ $("printBtn").onclick=()=>window.print();
 /* keyboard */
 window.addEventListener('keydown',e=>{const inInput=document.activeElement.tagName==='INPUT';
   if(mode==='measure'&&e.key==='Escape'){endMeasure();return;}
-  if(mode==='gebouw'&&e.key==='Escape'){setMode('idle');return;}
+  if((mode==='gebouw'||mode==='perceel')&&e.key==='Escape'){setMode('idle');return;}
   if(mode==='wall'&&!inInput){
     if(e.key>='0'&&e.key<='9'){typedLen+=e.key;wallStatus();e.preventDefault();return;}
     if((e.key==='.'||e.key===',')&&typedLen&&!typedLen.includes('.')){typedLen+='.';wallStatus();e.preventDefault();return;}

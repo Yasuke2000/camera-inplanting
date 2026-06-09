@@ -26,6 +26,9 @@ het resultaat kan delen en exporteren. Geen backend, geen build-stap, geen API-s
   (Digitaal Vlaanderen, kadastraal) wordt als bemate contour getekend, met melding van het **type en
   de oppervlakte (m²)**. Enkel Vlaanderen. Selecteer een contour om **omtrek + ingesloten
   oppervlakte** te zien — zo controleer je of een afbakening klopt.
+- **Perceel automatisch afbakenen** via *Perceel*: klik op een perceel → de **GRB-kadastergrens**
+  (`ADP`) wordt als *Terrein* gezet, met melding van **CAPAKEY + oppervlakte (m²)**. De
+  dekkingsanalyse rekent dan meteen op die perceelgrens.
 - **Meten** via *Meet*: klik twee punten voor de afstand in meter.
 - **SVG-export** via *SVG*: een proper vectorplan (muren, toestellen, labels, kabels, terrein,
   schaalbalk, noordpijl) als `.svg` — schaalbaar en bewerkbaar voor IT-documentatie (Inkscape, Visio,
