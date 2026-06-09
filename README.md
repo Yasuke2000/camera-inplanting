@@ -28,7 +28,11 @@ het resultaat kan delen en exporteren. Geen backend, geen build-stap, geen API-s
   oppervlakte** te zien — zo controleer je of een afbakening klopt.
 - **Perceel automatisch afbakenen** via *Perceel*: klik op een perceel → de **GRB-kadastergrens**
   (`ADP`) wordt als *Terrein* gezet, met melding van **CAPAKEY + oppervlakte (m²)**. De
-  dekkingsanalyse rekent dan meteen op die perceelgrens.
+  dekkingsanalyse rekent dan meteen op die perceelgrens. CAPAKEY + oppervlakte komen ook in de
+  CSV-export en op het SVG-plan.
+- **Hoekpunten bijstellen**: selecteer een muur/gebouwcontour (klik erop) of klik *Terrein* bij een
+  bestaande grens → sleep de hoekpunten om de afbakening manueel bij te regelen. Bij *Terrein* ook
+  *Nieuw terrein* / *Wis terrein*.
 - **Meten** via *Meet*: klik twee punten voor de afstand in meter.
 - **SVG-export** via *SVG*: een proper vectorplan (muren, toestellen, labels, kabels, terrein,
   schaalbalk, noordpijl) als `.svg` — schaalbaar en bewerkbaar voor IT-documentatie (Inkscape, Visio,

@@ -325,7 +325,9 @@ function renderLink(k){
   k._l.bringToBack();
 }
 function updateLinksFor(c){links.forEach(k=>{if(k.a===c.id||k.b===c.id)renderLink(k);});}
-function selectLink(id){selLink=id;sel=null;syncEditor();refreshList();links.forEach(renderLink);
+function selectLink(id){if(editingBoundary)stopBoundaryEdit();clearHandles();
+  if(selWall){selWall=null;walls.forEach(w=>w._l&&w._l.setStyle(wallStyle(false)));}
+  selLink=id;sel=null;syncEditor();refreshList();links.forEach(renderLink);
   const k=byLink(id),a=byId(k.a),b=byId(k.b);
   floatBar('Verbinding '+(a?a.label:'?')+' — '+(b?b.label:'?')+' · ',
     [['Verwijder',()=>{delLink(id);killBar();}],['Sluit',()=>{selLink=null;links.forEach(renderLink);killBar();}]]);}
@@ -353,7 +355,9 @@ function addNode(kind,latlng){
   toast(soortName(c)+' '+c.label+' geplaatst'+(isCam(c)?' — sleep het oranje punt om te richten':''));
 }
 const byId=id=>cams.find(c=>c.id===id);
-function select(id){const prev=byId(sel);selLink=null;sel=id;
+function select(id){if(editingBoundary)stopBoundaryEdit();clearHandles();
+  if(selWall){selWall=null;walls.forEach(w=>w._l&&w._l.setStyle(wallStyle(false)));}
+  const prev=byId(sel);selLink=null;sel=id;
   if(prev){prev._m&&prev._m.setIcon(makeIcon(prev));renderCam(prev);drawHandle(prev);}
   const c=byId(id);if(c){c._m&&c._m.setIcon(makeIcon(c));renderCam(c);drawHandle(c);}
   links.forEach(renderLink);refreshList();syncEditor();}
@@ -452,7 +456,7 @@ map.on('click',e=>{if(mode==='add'){addNode(addKind,e.latlng);setMode('idle');}
   else if(mode==='gebouw'){fetchBuilding(e.latlng);}
   else if(mode==='perceel'){fetchParcel(e.latlng);}
   else{if(selLink!==null){selLink=null;links.forEach(renderLink);killBar();}
-    if(selWall!==null){selWall=null;walls.forEach(w=>w._l.setStyle(wallStyle(false)));killBar();}}});
+    if(selWall!==null){selWall=null;walls.forEach(w=>w._l.setStyle(wallStyle(false)));clearHandles();killBar();}}});
 map.on('dblclick',e=>{if(mode==='wall'){L.DomEvent.stop(e);newWallRun();}});
 
 /* link mode */
@@ -522,8 +526,25 @@ function showImgControls(){
 }
 
 /* ---------- site boundary (terrein) ---------- */
-let boundary=[], bLayer=null, bDraw=null, bVtx=[];
-$("boundBtn").onclick=()=>{ if(mode==='terrein'){finishBoundary();return;} startBoundary(); };
+let boundary=[], bLayer=null, bDraw=null, bVtx=[], parcelCapakey=null, editHandles=[], editingBoundary=false;
+function drawBoundary(){if(bLayer)map.removeLayer(bLayer);if(!boundary.length)return;
+  bLayer=L.polygon(boundary,{color:'#1fb6a6',weight:2,dashArray:'6 4',fill:true,fillOpacity:.04,interactive:false}).addTo(map);}
+function clearHandles(){editHandles.forEach(m=>map.removeLayer(m));editHandles=[];}
+function vtxMarker(latlng,onDrag,onEnd){const h=L.marker(latlng,{draggable:true,keyboard:false,
+  icon:L.divIcon({className:'',iconSize:[14,14],iconAnchor:[7,7],html:'<div class="vtx"></div>'}),zIndexOffset:1200}).addTo(map);
+  h.on('drag',()=>onDrag(h.getLatLng()));if(onEnd)h.on('dragend',onEnd);editHandles.push(h);}
+function showWallHandles(w){clearHandles();w.pts.forEach((p,i)=>vtxMarker(p,
+  ll=>{w.pts[i]=[ll.lat,ll.lng];w._l.setLatLngs(w.pts);},()=>{addWallDims(w);scheduleSave();}));}
+function boundaryInfo(){return 'Terrein ±'+m2(polygonAreaM2(boundary))+(parcelCapakey?' · '+parcelCapakey:'');}
+function startBoundaryEdit(){editingBoundary=true;$("boundBtn").classList.add('active');sel=null;selLink=null;selWall=null;syncEditor();clearHandles();
+  boundary.forEach((p,i)=>vtxMarker(p,ll=>{boundary[i]=[ll.lat,ll.lng];bLayer.setLatLngs(boundary);},()=>{scheduleSave();if(analysisOn)scheduleAnalysis();}));
+  floatBar(boundaryInfo()+' · sleep de punten · ',
+    [['Nieuw terrein',()=>{stopBoundaryEdit();startBoundary();}],['Wis terrein',()=>{stopBoundaryEdit();clearBoundary();scheduleSave();if(analysisOn)scheduleAnalysis();}],['Klaar',stopBoundaryEdit]]);}
+function stopBoundaryEdit(){editingBoundary=false;$("boundBtn").classList.remove('active');clearHandles();killBar();}
+$("boundBtn").onclick=()=>{ if(mode==='terrein'){finishBoundary();return;}
+  if(editingBoundary){stopBoundaryEdit();return;}
+  if(boundary.length>=3){startBoundaryEdit();return;}
+  startBoundary(); };
 function startBoundary(){
   setMode('terrein');clearBoundary();bDraw=L.polyline([],{color:'#1fb6a6',weight:2,dashArray:'5 4'}).addTo(map);
   $("boundBtn").classList.add('active');map._container.style.cursor='crosshair';
@@ -533,12 +554,12 @@ function addVertex(ll){boundary.push([ll.lat,ll.lng]);bDraw.setLatLngs(boundary)
   bVtx.push(L.marker(ll,{icon:L.divIcon({className:'',iconSize:[12,12],iconAnchor:[6,6],html:'<div class="vtx"></div>'})}).addTo(map));}
 function finishBoundary(){
   if(boundary.length>=3){if(bDraw){map.removeLayer(bDraw);bDraw=null;}bVtx.forEach(m=>map.removeLayer(m));bVtx=[];
-    bLayer=L.polygon(boundary,{color:'#1fb6a6',weight:2,dashArray:'6 4',fill:true,fillOpacity:.04}).addTo(map);
+    parcelCapakey=null;drawBoundary();
     toast('Terrein vastgelegd ('+boundary.length+' hoekpunten)');scheduleSave();if(analysisOn)scheduleAnalysis();}
   else{clearBoundary();}
   $("boundBtn").classList.remove('active');map._container.style.cursor='';killBar();mode='idle';
 }
-function clearBoundary(){[bLayer,bDraw,...bVtx].forEach(l=>l&&map.removeLayer(l));bLayer=bDraw=null;bVtx=[];boundary=[];}
+function clearBoundary(){clearHandles();editingBoundary=false;[bLayer,bDraw,...bVtx].forEach(l=>l&&map.removeLayer(l));bLayer=bDraw=null;bVtx=[];boundary=[];parcelCapakey=null;}
 function pointInPoly(lat,lng,poly){let c=false;for(let i=0,j=poly.length-1;i<poly.length;j=i++){
   const yi=poly[i][0],xi=poly[i][1],yj=poly[j][0],xj=poly[j][1];
   if(((yi>lat)!==(yj>lat))&&(lng<(xj-xi)*(lat-yi)/(yj-yi)+xi))c=!c;}return c;}
@@ -603,12 +624,13 @@ function commitCurWall(){if(curWall&&curWall.pts.length>=2){const w=curWall;w._l
 function newWallRun(){commitCurWall();typedLen='';curWall={id:uid(),pts:[],_dims:[],_l:L.polyline([],wallStyle(false)).addTo(map)};}
 function finishWall(){commitCurWall();$("wallBtn").classList.remove('active');killBar();mode='idle';
   map._container.style.cursor='';map.doubleClickZoom.enable();}
-function selectWall(id){selWall=id;sel=null;selLink=null;syncEditor();refreshList();
+function selectWall(id){if(editingBoundary)stopBoundaryEdit();selWall=id;sel=null;selLink=null;syncEditor();refreshList();
   walls.forEach(w=>w._l.setStyle(wallStyle(w.id===selWall)));
   const w=walls.find(x=>x.id===id),mt=w?wallMetrics(w):{per:0,area:0};
-  floatBar('Omtrek '+mt.per.toFixed(1)+' m'+(w&&w.pts.length>=3?' · vlak ≈ '+m2(mt.area):'')+' · ',
-    [['Verwijder',()=>{delWall(id);killBar();}],['Sluit',()=>{selWall=null;walls.forEach(w=>w._l.setStyle(wallStyle(false)));killBar();}]]);}
-function delWall(id){const w=walls.find(x=>x.id===id);if(w){clearWallDims(w);if(w._l)map.removeLayer(w._l);}walls=walls.filter(x=>x.id!==id);if(selWall===id)selWall=null;updateLegend();scheduleSave();}
+  if(w)showWallHandles(w);
+  floatBar('Omtrek '+mt.per.toFixed(1)+' m'+(w&&w.pts.length>=3?' · vlak ≈ '+m2(mt.area):'')+' · sleep punten · ',
+    [['Verwijder',()=>{delWall(id);killBar();}],['Sluit',()=>{selWall=null;clearHandles();walls.forEach(w=>w._l.setStyle(wallStyle(false)));killBar();}]]);}
+function delWall(id){clearHandles();const w=walls.find(x=>x.id===id);if(w){clearWallDims(w);if(w._l)map.removeLayer(w._l);}walls=walls.filter(x=>x.id!==id);if(selWall===id)selWall=null;updateLegend();scheduleSave();}
 
 /* ---------- measure tool (meetlat) ---------- */
 let measureLayer=null, measurePts=[];
@@ -680,12 +702,10 @@ async function fetchParcel(ll){
 function setParcelTerrein(f){
   const ring=geoPolys(f.geometry)[0][0];let pts=ring.map(([lo,la])=>[la,lo]);
   if(pts.length>1&&Math.abs(pts[0][0]-pts[pts.length-1][0])<1e-9&&Math.abs(pts[0][1]-pts[pts.length-1][1])<1e-9)pts=pts.slice(0,-1);
-  clearBoundary();boundary=pts;
-  bLayer=L.polygon(boundary,{color:'#1fb6a6',weight:2,dashArray:'6 4',fill:true,fillOpacity:.04}).addTo(map);
+  clearBoundary();boundary=pts;parcelCapakey=(f.properties&&f.properties.CAPAKEY)||null;drawBoundary();
   map.fitBounds(bLayer.getBounds(),{maxZoom:21,padding:[60,60]});
   scheduleSave();if(analysisOn)scheduleAnalysis();
-  const ck=(f.properties&&f.properties.CAPAKEY)||'';
-  toast('Perceel als terrein gezet'+(ck?' · '+ck:'')+' · ±'+m2(polygonAreaM2(pts)));
+  toast('Perceel als terrein gezet'+(parcelCapakey?' · '+parcelCapakey:'')+' · ±'+m2(polygonAreaM2(pts)));
 }
 
 /* ---------- coverage analysis (camera's only) ---------- */
@@ -719,7 +739,7 @@ function computeAnalysis(){
   $("statcard").classList.add('show');
   $("stbar").innerHTML=`<i style="width:${pct(ov)}%;background:#4fa24a"></i><i style="width:${pct(ok)}%;background:#5aa9ff"></i><i style="width:${pct(gap)}%;background:#e5564b"></i>`;
   $("stOv").textContent=pct(ov)+'%';$("stOk").textContent=pct(ok)+'%';$("stGap").textContent=pct(gap)+'%';
-  $("stMeta").innerHTML=`Terrein ≈ ${area.toLocaleString('nl-BE')} m² · ${nCam} camera('s) · raster ${anaStep} m`;
+  $("stMeta").innerHTML=`Terrein ≈ ${area.toLocaleString('nl-BE')} m² · ${nCam} camera('s) · raster ${anaStep} m${parcelCapakey?' · '+parcelCapakey:''}`;
 }
 function drawAna(){if(!analysisOn||!anaCells||!anaCanvas)return;
   const s=map.getSize();const tl=map.containerPointToLayerPoint([0,0]);
@@ -750,6 +770,8 @@ $("csvBtn").onclick=()=>{
   rows.push('# Aantal toestellen'+sep+cams.length);
   Object.entries(totals).forEach(([t,n])=>rows.push('# '+t+sep+n));
   rows.push('# Aantal verbindingen'+sep+links.length);
+  if(boundary.length>=3)rows.push('# Terrein oppervlakte m²'+sep+Math.round(polygonAreaM2(boundary)));
+  if(parcelCapakey)rows.push('# Perceel CAPAKEY'+sep+parcelCapakey);
   if(analysisOn&&anaCells){const tot=anaCells.length,gap=anaCells.filter(c=>c[2]===0).length,ov=anaCells.filter(c=>c[2]>=2).length;
     rows.push('# Camera-dekking gedekt%'+sep+Math.round((tot-gap)/tot*100));
     rows.push('# Blinde vlek%'+sep+Math.round(gap/tot*100));
@@ -790,7 +812,8 @@ function exportSVG(){
   // title
   const title=$("q").value.trim()||'Plattegrond';
   s+=`<text x="${M}" y="34" font-size="18" font-weight="700" fill="#11161a">${esc(title)}</text>`;
-  s+=`<text x="${M}" y="52" font-size="11" fill="#5e6a73">Infra-inplanting · ${new Date().toLocaleDateString('nl-BE')} · schaal ±1 px = ${(1/ppm).toFixed(2)} m</text>`;
+  const sub2=(parcelCapakey?' · perceel '+parcelCapakey:'')+(boundary.length>=3?' · terrein ±'+m2(polygonAreaM2(boundary)):'');
+  s+=`<text x="${M}" y="52" font-size="11" fill="#5e6a73">Infra-inplanting · ${new Date().toLocaleDateString('nl-BE')} · schaal ±1 px = ${(1/ppm).toFixed(2)} m${esc(sub2)}</text>`;
   // boundary
   if(boundary.length>=3)s+=`<polygon points="${boundary.map(proj).join(' ')}" fill="#1fb6a6" fill-opacity="0.05" stroke="#1fb6a6" stroke-width="1.5" stroke-dasharray="7 5"/>`;
   // camera cones
@@ -842,7 +865,7 @@ function state(){const c=map.getCenter();return{c:[+c.lat.toFixed(6),+c.lng.toFi
   bnd:boundary.map(p=>[+p[0].toFixed(6),+p[1].toFixed(6)]),
   cams:cams.map(x=>({k:x.kind,l:x.label,la:+x.lat.toFixed(6),lo:+x.lng.toFixed(6),d:x.dir,f:x.fov,r:x.range,t:x.type,h:x.h,no:x.note||''})),
   lk:links.map(k=>[cams.findIndex(c=>c.id===k.a),cams.findIndex(c=>c.id===k.b)]).filter(p=>p[0]>=0&&p[1]>=0),
-  wl:walls.map(w=>w.pts.map(p=>[+p[0].toFixed(6),+p[1].toFixed(6)]))};}
+  wl:walls.map(w=>w.pts.map(p=>[+p[0].toFixed(6),+p[1].toFixed(6)])),pk:parcelCapakey||undefined};}
 function restore(s){if(!s)return;
   [...cams].forEach(c=>[c._m,c._c,c._h].forEach(l=>l&&map.removeLayer(l)));cams=[];
   links.forEach(k=>k._l&&map.removeLayer(k._l));links=[];sel=null;selLink=null;
@@ -855,8 +878,8 @@ function restore(s){if(!s)return;
     w._l.on('click',e=>{selectWall(w.id);L.DomEvent.stop(e);});walls.push(w);addWallDims(w);}});
   if(s.c)map.setView(s.c,s.z||18);
   if(s.b==='ortho'){map.removeLayer(esri);ortho.addTo(map);activeBase='ortho';}else if(s.b==='osm'){map.removeLayer(esri);osm.addTo(map);activeBase='osm';}
-  clearBoundary();if(s.bnd&&s.bnd.length>=3){boundary=s.bnd.map(p=>[p[0],p[1]]);
-    bLayer=L.polygon(boundary,{color:'#1fb6a6',weight:2,dashArray:'6 4',fill:true,fillOpacity:.04}).addTo(map);}
+  clearBoundary();if(s.bnd&&s.bnd.length>=3){boundary=s.bnd.map(p=>[p[0],p[1]]);drawBoundary();}
+  parcelCapakey=s.pk||null;
   renderAll();syncEditor();}
 let savtmr;function scheduleSave(){clearTimeout(savtmr);savtmr=setTimeout(()=>{try{localStorage.setItem(LS,JSON.stringify(state()));}catch{}},400);if(analysisOn)scheduleAnalysis();}
 map.on('moveend zoomend',scheduleSave);
