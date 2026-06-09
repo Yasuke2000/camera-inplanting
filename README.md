@@ -15,6 +15,12 @@ het resultaat kan delen en exporteren. Geen backend, geen build-stap, geen API-s
 - **Camera's richten**: sleep het oranje punt om richting + bereik in te stellen; FOV-kegel in echte meters.
 - **Bekabeling**: knop *Verbind* → klik twee toestellen om ze met een lijn te verbinden (toont wat
   met wat verbindt). Verbindingen verschuiven mee als je een toestel versleept.
+- **Plattegrond tekenen** via *Binnen*: klik punten om muren te tekenen. Haakse hoeken worden
+  automatisch recht gezet (houd **Shift** voor vrij tekenen), punten klikken vast op bestaande
+  hoekpunten. **Dubbelklik** = aparte muur starten, **Enter** = klaar, **⌫** = laatste punt ongedaan.
+- **SVG-export** via *SVG*: een proper vectorplan (muren, toestellen, labels, kabels, terrein,
+  schaalbalk, noordpijl) als `.svg` — schaalbaar en bewerkbaar voor IT-documentatie (Inkscape, Visio,
+  Word…). Voor een snelle kaart-met-luchtfoto blijft *PDF* (print) beschikbaar.
 - **Terrein tekenen** → **dekkingsanalyse** (camera's): blinde vlekken (rood), overlap ≥2 cam's
   (groen), met percentages en geschatte oppervlakte.
 - **Legende** in/uitschakelen om aan anderen uit te leggen wat elk symbool betekent.
