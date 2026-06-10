@@ -44,8 +44,11 @@ het resultaat kan delen en exporteren. Geen backend, geen build-stap, geen API-s
 - **Terrein tekenen** → **dekkingsanalyse** (camera's): blinde vlekken (rood), overlap ≥2 cam's
   (groen), met percentages en geschatte oppervlakte.
 - **Legende** in/uitschakelen om aan anderen uit te leggen wat elk symbool betekent.
-- **Delen**: knop *Deel* kopieert een link met het volledige plan in de URL.
-- **Exporteren**: CSV (toestel- + kabellijst voor de offerte), JSON (export/import), PDF via print.
+- **Plan delen om samen te bewerken**: knop *Bewaar* schrijft het volledige plan naar een
+  `infra-plan.json`-bestand. Iemand anders opent dat met *Open* (of sleept het op de kaart) en kan
+  meteen verder bewerken — alle toestellen, muren, kabels, labels, terrein en kaartpositie zitten erin.
+- **Delen via link**: knop *Deel* kopieert een link met het volledige plan in de URL.
+- **Exporteren**: CSV (toestel- + kabellijst voor de offerte), PDF via print, SVG-vectorplan.
 - Auto-opslaan in de browser (localStorage).
 
 ## Lokaal openen
