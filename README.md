@@ -8,7 +8,10 @@ het resultaat kan delen en exporteren. Geen backend, geen build-stap, geen API-s
 ## Wat ze doet
 
 - **Adres zoeken** (Geopunt-geocoder) → live luchtfoto verschijnt. Geen upload nodig.
-- **Kaartlagen**: Esri luchtfoto (wereld), Vlaanderen 15 cm orthofoto, OSM, en GRB-kadaster als overlay.
+- **Kaartlagen**: Esri luchtfoto (wereld) of OSM als basis; Vlaanderen 15 cm orthofoto en GRB-kadaster
+  als overlays. De Vlaanderen-ortho ligt transparant op Esri, zodat gebieden zonder ortho-data (of een
+  tegel die even niet laadt) gewoon de Esri-luchtfoto tonen i.p.v. een zwart vlak. Mislukte tegels
+  worden automatisch opnieuw geladen.
 - **Toestellen plaatsen** via *Plaats ▾*: camera's (vast/bullet, dome 360°, PTZ), netwerkswitches,
   patchkasten/racks, nuts-/kabelintredepunten en WiFi access points. Elk met een montagehoogte en
   een vrije notitie ("waar komt wat binnen").

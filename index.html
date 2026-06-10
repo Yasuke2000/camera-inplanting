@@ -16,8 +16,8 @@
   }
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;font-family:var(--sans);background:var(--bg);color:var(--ink);overflow:hidden}
-  #map{position:absolute;inset:0;background:#0e1317}
-  .leaflet-container{background:#0e1317}
+  #map{position:absolute;inset:0;background:#343a40}
+  .leaflet-container{background:#343a40}
 
   /* top bar */
   .topbar{position:absolute;top:10px;left:10px;right:10px;z-index:1000;display:flex;gap:7px;align-items:flex-start;
@@ -221,21 +221,27 @@ const fmtH=v=>(''+v).replace('.',',');
 /* ---------- map + layers ---------- */
 const map=L.map('map',{zoomControl:true,maxZoom:22}).setView([51.1373,3.3185],18);
 
+/* mislukte tegels (netwerk/no-data) automatisch herladen i.p.v. zwart laten */
+function retryTiles(layer){layer.on('tileerror',e=>{const t=e.tile;if(!t)return;const n=t._retry||0;if(n>=2)return;t._retry=n+1;
+  const base=t.src.split('#')[0];setTimeout(()=>{t.src=base+(base.indexOf('?')>-1?'&':'?')+'_r='+n+'_'+(performance.now()|0);},450*(n+1));});}
+
 const esri=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-  {maxZoom:22,maxNativeZoom:19,attribution:'Luchtfoto © Esri'});
+  {maxZoom:22,maxNativeZoom:19,keepBuffer:4,attribution:'Luchtfoto © Esri'});
 const ortho=L.tileLayer.wms('https://geo.api.vlaanderen.be/OMWRGBMRVL/wms',
-  {layers:'Ortho',format:'image/png',transparent:false,version:'1.3.0',maxZoom:22,attribution:'Orthofoto 15cm © Digitaal Vlaanderen'});
+  {layers:'Ortho',format:'image/png',transparent:true,version:'1.3.0',maxZoom:22,keepBuffer:4,attribution:'Orthofoto 15cm © Digitaal Vlaanderen'});
 const osm=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
   {maxZoom:19,attribution:'© OpenStreetMap'});
 const grb=L.tileLayer.wms('https://geo.api.vlaanderen.be/GRB-basiskaart/wms',
   {layers:'GRB_BSK',format:'image/png',transparent:true,version:'1.3.0',opacity:.85,maxZoom:22,attribution:'GRB © Digitaal Vlaanderen'});
+[esri,ortho,osm,grb].forEach(retryTiles);
 
 esri.addTo(map);
-const baseLayers={"Luchtfoto (wereld)":esri,"Luchtfoto Vlaanderen 15cm":ortho,"Kaart (OSM)":osm};
-const overlays={"GRB-kadaster (Vlaanderen)":grb};
+const baseLayers={"Luchtfoto (wereld)":esri,"Kaart (OSM)":osm};
+const overlays={"Vlaanderen 15cm (scherper)":ortho,"GRB-kadaster (Vlaanderen)":grb};
 L.control.layers(baseLayers,overlays,{position:'topright'}).addTo(map);
 let activeBase='esri';
-map.on('baselayerchange',e=>{activeBase=e.name.includes('Vlaanderen')?'ortho':e.name.includes('OSM')?'osm':'esri';scheduleSave();});
+map.on('baselayerchange',e=>{activeBase=e.name.includes('OSM')?'osm':'esri';scheduleSave();});
+map.on('overlayadd overlayremove',scheduleSave);
 
 /* geometrie-helpers (dest, bearing, R, D2R, R2D) staan in geo.js */
 
@@ -906,7 +912,7 @@ let ttmr;function toast(msg){const t=$("toast");t.textContent=msg;t.classList.ad
 
 /* ---------- persistence + share ---------- */
 const LS='infraplan.kaarttool.v2';
-function state(){const c=map.getCenter();return{c:[+c.lat.toFixed(6),+c.lng.toFixed(6)],z:map.getZoom(),b:activeBase,ct:{...counters},
+function state(){const c=map.getCenter();return{c:[+c.lat.toFixed(6),+c.lng.toFixed(6)],z:map.getZoom(),b:activeBase,ov:{o:map.hasLayer(ortho),g:map.hasLayer(grb)},ct:{...counters},
   bnd:boundary.map(p=>[+p[0].toFixed(6),+p[1].toFixed(6)]),
   cams:cams.map(x=>({k:x.kind,l:x.label,la:+x.lat.toFixed(6),lo:+x.lng.toFixed(6),d:x.dir,f:x.fov,r:x.range,t:x.type,h:x.h,no:x.note||''})),
   lk:links.map(k=>[cams.findIndex(c=>c.id===k.a),cams.findIndex(c=>c.id===k.b)]).filter(p=>p[0]>=0&&p[1]>=0),
@@ -926,7 +932,9 @@ function restore(s){if(!s)return;
   (s.wl||[]).forEach(pts=>{if(pts&&pts.length>=2){const w={id:uid(),pts:pts.map(p=>[p[0],p[1]]),_dims:[],_l:L.polyline(pts,wallStyle(false)).addTo(map)};
     w._l.on('click',e=>{selectWall(w.id);L.DomEvent.stop(e);});walls.push(w);addWallDims(w);}});
   if(s.c)map.setView(s.c,s.z||18);
-  if(s.b==='ortho'){map.removeLayer(esri);ortho.addTo(map);activeBase='ortho';}else if(s.b==='osm'){map.removeLayer(esri);osm.addTo(map);activeBase='osm';}
+  if(s.b==='osm'){map.removeLayer(esri);osm.addTo(map);activeBase='osm';}
+  if(s.ov){if(s.ov.o)ortho.addTo(map);else map.removeLayer(ortho);if(s.ov.g)grb.addTo(map);else map.removeLayer(grb);}
+  else if(s.b==='ortho')ortho.addTo(map);  // back-compat: oude opslag had ortho als basislaag
   clearBoundary();if(s.bnd&&s.bnd.length>=3){boundary=s.bnd.map(p=>[p[0],p[1]]);drawBoundary();}
   parcelCapakey=s.pk||null;
   renderAll();syncEditor();}
