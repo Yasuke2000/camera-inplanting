@@ -113,20 +113,23 @@ test('segsIntersect: kruisend, niet-kruisend, rakend', () => {
   assert.strictEqual(geo.segsIntersect(cam, pt, w3, w4), false, 'muur achter camera blokkeert niet');
 });
 
-test('index.html escapet gebruikerstekst in innerHTML (XSS-regressie)', () => {
-  const h = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-  assert.ok(h.includes('const esc='), 'esc-helper aanwezig');
-  assert.ok(h.includes('const escAttr='), 'escAttr-helper aanwezig');
+test('app.js escapet gebruikerstekst in innerHTML (XSS-regressie)', () => {
+  const a = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+  assert.ok(a.includes('const esc='), 'esc-helper aanwezig');
+  assert.ok(a.includes('const escAttr='), 'escAttr-helper aanwezig');
   // labels/notities/tekstlabels mogen nooit rauw in een template-string naar innerHTML —
-  // plannen komen ook uit gedeelde #p=-links en json-bestanden (altijd via esc/escAttr)
-  assert.ok(!/\$\{(c\.label|c\.note|t\.text|a\.label|b\.label)\b/.test(h), 'gebruikerstekst alleen via esc/escAttr');
+  // plannen komen ook uit gedeelde #z=/#p=-links en json-bestanden (altijd via esc/escAttr)
+  assert.ok(!/\$\{(c\.label|c\.note|t\.text|a\.label|b\.label)\b/.test(a), 'gebruikerstekst alleen via esc/escAttr');
 });
 
-test('index.html laadt geo.js en heeft één inline-script (refactor-regressie)', () => {
+test('index.html laadt geo.js + app.js en heeft geen inline-script (refactor-regressie)', () => {
   const h = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const a = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
   assert.ok(h.includes('<script src="geo.js"></script>'), 'geo.js wordt ingeladen');
+  assert.ok(h.includes('<script src="app.js"></script>'), 'app.js wordt ingeladen');
+  assert.ok(h.indexOf('src="geo.js"') < h.indexOf('src="app.js"'), 'geo.js vóór app.js');
   const inline = [...h.matchAll(/<script>([\s\S]*?)<\/script>/g)];
-  assert.strictEqual(inline.length, 1, 'precies één inline-script');
-  assert.ok(!/function dest\(/.test(inline[0][1]), 'dest niet gedupliceerd in index.html');
-  assert.ok(!/function polygonAreaM2\(/.test(inline[0][1]), 'polygonAreaM2 niet gedupliceerd in index.html');
+  assert.strictEqual(inline.length, 0, 'geen inline-scripts meer');
+  assert.ok(!/function dest\(/.test(a), 'dest niet gedupliceerd in app.js');
+  assert.ok(!/function polygonAreaM2\(/.test(a), 'polygonAreaM2 niet gedupliceerd in app.js');
 });
