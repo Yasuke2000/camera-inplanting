@@ -104,3 +104,5 @@ DNS-provider een CNAME-record naar `yasuke2000.github.io`.
   lensberekeningen.
 - De Geopunt-adreszoeker en de Vlaanderen-lagen gelden voor Vlaanderen/Brussel; daarbuiten gebruik
   je de wereldwijde Esri-luchtfoto.
+
+<!-- deploy: 2026-07-03 -->
