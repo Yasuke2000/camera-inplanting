@@ -90,6 +90,29 @@ test('simplifyCollinear verwijdert bijna-rechte punten, behoudt echte hoeken', (
   assert.strictEqual(geo.simplifyCollinear([[0, 0], [0, 2], [2, 2]], false).length, 3);
 });
 
+test('segsIntersect: kruisend, niet-kruisend, rakend', () => {
+  // kruisend
+  assert.strictEqual(geo.segsIntersect([0, 0], [2, 2], [0, 2], [2, 0]), true);
+  // evenwijdig, niet rakend
+  assert.strictEqual(geo.segsIntersect([0, 0], [2, 0], [0, 1], [2, 1]), false);
+  // los van elkaar
+  assert.strictEqual(geo.segsIntersect([0, 0], [1, 0], [2, 2], [3, 3]), false);
+  // eindpunt raakt segment (muurhoek blokkeert)
+  assert.strictEqual(geo.segsIntersect([0, 0], [2, 0], [1, 0], [1, 2]), true);
+  // gedeeld eindpunt
+  assert.strictEqual(geo.segsIntersect([0, 0], [1, 1], [1, 1], [2, 0]), true);
+  // collineair, overlappend
+  assert.strictEqual(geo.segsIntersect([0, 0], [2, 0], [1, 0], [3, 0]), true);
+  // collineair, los
+  assert.strictEqual(geo.segsIntersect([0, 0], [1, 0], [2, 0], [3, 0]), false);
+  // realistische lat/lng-schaal: muur tussen camera en punt
+  const cam = [51.13730, 3.31850], pt = geo.dest(cam[0], cam[1], 90, 30);
+  const w1 = geo.dest(cam[0], cam[1], 45, 15), w2 = geo.dest(cam[0], cam[1], 135, 15);
+  assert.strictEqual(geo.segsIntersect(cam, pt, w1, w2), true, 'muur blokkeert zichtlijn');
+  const w3 = geo.dest(cam[0], cam[1], 200, 5), w4 = geo.dest(cam[0], cam[1], 250, 5);
+  assert.strictEqual(geo.segsIntersect(cam, pt, w3, w4), false, 'muur achter camera blokkeert niet');
+});
+
 test('index.html escapet gebruikerstekst in innerHTML (XSS-regressie)', () => {
   const h = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
   assert.ok(h.includes('const esc='), 'esc-helper aanwezig');

@@ -753,10 +753,20 @@ function setParcelTerrein(f){
 
 /* ---------- coverage analysis (camera's only) ---------- */
 let analysisOn=false, anaCanvas=null, anaCells=null, anaStep=4;
+/* zichtlijn camera→punt: geblokkeerd zodra ze een muursegment kruist. Start ±0,5 m
+   van de camera af zodat een camera die óp een muur hangt niet door die muur zelf
+   wordt geblokkeerd. */
+function losClear(cLat,cLng,lat,lng,d){
+  if(!walls.length)return true;
+  const t=Math.min(0.9,0.5/Math.max(d,0.6));
+  const a=[cLat+(lat-cLat)*t,cLng+(lng-cLng)*t],b=[lat,lng];
+  for(const w of walls)for(let i=1;i<w.pts.length;i++)
+    if(segsIntersect(a,b,w.pts[i-1],w.pts[i]))return false;
+  return true;}
 function coverCount(lat,lng){let n=0;const p=L.latLng(lat,lng);
-  for(const c of cams){if(!isCam(c))continue;const cc=L.latLng(c.lat,c.lng);if(cc.distanceTo(p)>c.range)continue;
-    if(c.type==='dome'&&c.fov>=360){n++;continue;}
-    if(angDiff(bearing(cc,p),c.dir)<=c.fov/2)n++;}
+  for(const c of cams){if(!isCam(c))continue;const cc=L.latLng(c.lat,c.lng);const d=cc.distanceTo(p);if(d>c.range)continue;
+    if(!(c.type==='dome'&&c.fov>=360)&&angDiff(bearing(cc,p),c.dir)>c.fov/2)continue;
+    if(losClear(c.lat,c.lng,lat,lng,d))n++;}
   return n;}
 function ensureCanvas(){if(anaCanvas)return;anaCanvas=document.createElement('canvas');
   anaCanvas.style.cssText='position:absolute;pointer-events:none;z-index:-1';
@@ -781,7 +791,7 @@ function computeAnalysis(){
   $("statcard").classList.add('show');
   $("stbar").innerHTML=`<i style="width:${pct(ov)}%;background:#4fa24a"></i><i style="width:${pct(ok)}%;background:#5aa9ff"></i><i style="width:${pct(gap)}%;background:#e5564b"></i>`;
   $("stOv").textContent=pct(ov)+'%';$("stOk").textContent=pct(ok)+'%';$("stGap").textContent=pct(gap)+'%';
-  $("stMeta").innerHTML=`Terrein ≈ ${area.toLocaleString('nl-BE')} m² · ${nCam} camera('s) · raster ${anaStep} m${parcelCapakey?' · '+parcelCapakey:''}`;
+  $("stMeta").innerHTML=`Terrein ≈ ${area.toLocaleString('nl-BE')} m² · ${nCam} camera('s) · raster ${anaStep} m${walls.length?' · muren blokkeren zicht':''}${parcelCapakey?' · '+esc(parcelCapakey):''}`;
 }
 function drawAna(){if(!analysisOn||!anaCells||!anaCanvas)return;
   const s=map.getSize();const tl=map.containerPointToLayerPoint([0,0]);
@@ -803,6 +813,9 @@ $("anaBtn").onclick=()=>{
 };
 
 /* ---------- CSV export ---------- */
+/* vrije tekst: scheidingsteken/regeleinden eruit + apostrof vóór =+-@ zodat een
+   rekenblad er geen formule van maakt (CSV-injectie) */
+const csvCell=s=>{s=(''+s).replace(/[;\r\n]/g,' ');return /^[=+\-@\t]/.test(s)?"'"+s:s;};
 $("csvBtn").onclick=()=>{
   if(!cams.length){toast('Geen toestellen om te exporteren');return;}
   const totals={};cams.forEach(c=>{const key=isCam(c)?'Camera':KINDS[c.kind].name;totals[key]=(totals[key]||0)+1;});
@@ -821,9 +834,9 @@ $("csvBtn").onclick=()=>{
   rows.push('');
   rows.push(['Label','Soort','Latitude','Longitude','Richting_graden','Kompas','FOV_graden','Bereik_m','Montagehoogte_m','Verbindingen','Notitie'].join(sep));
   cams.forEach(c=>{const dome=c.type==='dome'&&c.fov>=360;const cam=isCam(c);
-    rows.push([c.label,soortName(c),c.lat.toFixed(6),c.lng.toFixed(6),
+    rows.push([csvCell(c.label),soortName(c),c.lat.toFixed(6),c.lng.toFixed(6),
       cam?(dome?'':c.dir):'',cam?(dome?'360°':compName(c.dir)):'',cam?(dome?360:c.fov):'',cam?c.range:'',
-      fmtH(c.h),linkCount(c.id),(c.note||'').replace(/[;\r\n]/g,' ')].join(sep));});
+      fmtH(c.h),linkCount(c.id),csvCell(c.note||'')].join(sep));});
   if(links.length){rows.push('');
     const ctot={};let lentot=0;
     links.forEach(k=>{const a=byId(k.a),b=byId(k.b);if(!a||!b)return;const d=mDist([a.lat,a.lng],[b.lat,b.lng]);
@@ -831,7 +844,7 @@ $("csvBtn").onclick=()=>{
     rows.push('# Totale kabellengte m'+sep+Math.round(lentot));
     Object.entries(ctot).forEach(([t,mm])=>rows.push('# '+t+' m'+sep+Math.round(mm)));
     rows.push('# Verbindingen (bekabeling)');rows.push(['Van','Naar','Type','Lengte_m'].join(sep));
-    links.forEach(k=>{const a=byId(k.a),b=byId(k.b);if(a&&b)rows.push([a.label,b.label,(CABLES[k.type]||CABLES.other).name,mDist([a.lat,a.lng],[b.lat,b.lng]).toFixed(1)].join(sep));});}
+    links.forEach(k=>{const a=byId(k.a),b=byId(k.b);if(a&&b)rows.push([csvCell(a.label),csvCell(b.label),(CABLES[k.type]||CABLES.other).name,mDist([a.lat,a.lng],[b.lat,b.lng]).toFixed(1)].join(sep));});}
   const blob=new Blob(['﻿'+rows.join('\r\n')],{type:'text/csv;charset=utf-8'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='infra-inplanting.csv';a.click();
   toast('CSV geëxporteerd ('+cams.length+' toestellen, '+links.length+' kabels)');
@@ -923,7 +936,7 @@ function state(){const c=map.getCenter();return{c:[+c.lat.toFixed(6),+c.lng.toFi
   wl:walls.map(w=>w.pts.map(p=>[+p[0].toFixed(6),+p[1].toFixed(6)])),pk:parcelCapakey||undefined,
   lt:links.map(k=>k.type||'utp'),
   tx:labels.map(t=>({t:t.text,la:+t.lat.toFixed(6),lo:+t.lng.toFixed(6)}))};}
-function restore(s){if(!s)return;
+function restore(s,keepView){if(!s)return;
   [...cams].forEach(c=>[c._m,c._c,c._h].forEach(l=>l&&map.removeLayer(l)));cams=[];
   links.forEach(k=>{k._l&&map.removeLayer(k._l);k._dim&&map.removeLayer(k._dim);});links=[];sel=null;selLink=null;
   labels.forEach(t=>t._m&&map.removeLayer(t._m));labels=[];selLabel=null;
@@ -935,21 +948,55 @@ function restore(s){if(!s)return;
   (s.tx||[]).forEach(x=>{labels.push({id:uid(),text:x.t,lat:x.la,lng:x.lo});});
   (s.wl||[]).forEach(pts=>{if(pts&&pts.length>=2){const w={id:uid(),pts:pts.map(p=>[p[0],p[1]]),_dims:[],_l:L.polyline(pts,wallStyle(false)).addTo(map)};
     w._l.on('click',e=>{selectWall(w.id);L.DomEvent.stop(e);});walls.push(w);addWallDims(w);}});
-  if(s.c)map.setView(s.c,s.z||18);
-  if(s.b==='osm'){map.removeLayer(esri);osm.addTo(map);activeBase='osm';}
-  if(s.ov){if(s.ov.o)ortho.addTo(map);else map.removeLayer(ortho);if(s.ov.g)grb.addTo(map);else map.removeLayer(grb);}
-  else if(s.b==='ortho')ortho.addTo(map);  // back-compat: oude opslag had ortho als basislaag
+  if(!keepView){ // bij undo/redo blijven kaartpositie en lagen staan
+    if(s.c)map.setView(s.c,s.z||18);
+    if(s.b==='osm'){map.removeLayer(esri);osm.addTo(map);activeBase='osm';}
+    if(s.ov){if(s.ov.o)ortho.addTo(map);else map.removeLayer(ortho);if(s.ov.g)grb.addTo(map);else map.removeLayer(grb);}
+    else if(s.b==='ortho')ortho.addTo(map);  // back-compat: oude opslag had ortho als basislaag
+  }
   clearBoundary();if(s.bnd&&s.bnd.length>=3){boundary=s.bnd.map(p=>[p[0],p[1]]);drawBoundary();}
   parcelCapakey=s.pk||null;
   renderAll();syncEditor();}
-let savtmr;function scheduleSave(){clearTimeout(savtmr);savtmr=setTimeout(()=>{try{localStorage.setItem(LS,JSON.stringify(state()));}catch{}},400);if(analysisOn)scheduleAnalysis();}
+/* ---- undo/redo: snapshot bij elke structurele wijziging (pannen/zoomen telt niet mee) ---- */
+const VIEW_KEYS=['c','z','b','ov'];
+const coreOf=s=>{const o={...s};VIEW_KEYS.forEach(k=>delete o[k]);return JSON.stringify(o);};
+let undoStack=[],redoStack=[],lastSnap=null,lastCore=null;
+function persist(s){try{localStorage.setItem(LS,JSON.stringify(s));}catch{}}
+function saveNow(){const s=state(),core=coreOf(s);
+  if(lastSnap&&core!==lastCore){undoStack.push(lastSnap);if(undoStack.length>60)undoStack.shift();redoStack=[];}
+  lastSnap=s;lastCore=core;persist(s);}
+function markSnap(){lastSnap=state();lastCore=coreOf(lastSnap);}
+function applySnap(s){clearTimeout(savtmr);lastSnap=s;lastCore=coreOf(s);
+  restore(s,true);refreshList();syncEditor();persist(s);if(analysisOn)scheduleAnalysis();}
+function doUndo(){saveNow();if(!undoStack.length){toast('Niets om ongedaan te maken');return;}
+  redoStack.push(lastSnap);applySnap(undoStack.pop());toast('Ongedaan gemaakt (Ctrl+Y = opnieuw)');}
+function doRedo(){saveNow();if(!redoStack.length){toast('Niets om opnieuw te doen');return;}
+  undoStack.push(lastSnap);applySnap(redoStack.pop());toast('Opnieuw gedaan');}
+let savtmr;function scheduleSave(){clearTimeout(savtmr);savtmr=setTimeout(saveNow,400);if(analysisOn)scheduleAnalysis();}
 map.on('moveend zoomend',scheduleSave);
 
-function encodeState(){return btoa(unescape(encodeURIComponent(JSON.stringify(state()))));}
-function decodeState(h){try{return JSON.parse(decodeURIComponent(escape(atob(h))));}catch{return null;}}
-$("shareBtn").onclick=async()=>{const url=location.origin+location.pathname+'#p='+encodeState();
+/* deellinks: gecomprimeerd (#z=, deflate + base64url — grote plannen passen zo in een
+   URL) met fallback en back-compat voor oude ongecomprimeerde #p=-links */
+const b64u=buf=>{let s='';new Uint8Array(buf).forEach(x=>s+=String.fromCharCode(x));
+  return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');};
+const unb64u=str=>{const b=atob(str.replace(/-/g,'+').replace(/_/g,'/'));
+  const u=new Uint8Array(b.length);for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return u;};
+async function encodeShare(){const json=JSON.stringify(state());
+  if(window.CompressionStream){try{
+    const buf=await new Response(new Blob([json]).stream().pipeThrough(new CompressionStream('deflate-raw'))).arrayBuffer();
+    return 'z='+b64u(buf);}catch{}}
+  return 'p='+btoa(unescape(encodeURIComponent(json)));}
+async function decodeHash(h){
+  let m=h.match(/z=([^&]+)/);
+  if(m&&window.DecompressionStream){try{
+    const buf=await new Response(new Blob([unb64u(m[1])]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer();
+    return JSON.parse(new TextDecoder().decode(buf));}catch{return null;}}
+  m=h.match(/p=([^&]+)/);
+  if(m){try{return JSON.parse(decodeURIComponent(escape(atob(m[1]))));}catch{return null;}}
+  return null;}
+$("shareBtn").onclick=async()=>{const h=await encodeShare(),url=location.origin+location.pathname+'#'+h;
   try{await navigator.clipboard.writeText(url);toast('Deelbare link gekopieerd ✓');}catch{prompt('Kopieer deze link:',url);}
-  history.replaceState(null,'','#p='+encodeState());};
+  history.replaceState(null,'','#'+h);};
 
 /* JSON export (click) / import (dubbelklik of sleep bestand op de kaart) */
 $("jsonBtn").onclick=()=>{const a=document.createElement('a');
@@ -970,6 +1017,9 @@ $("printBtn").onclick=()=>window.print();
 
 /* keyboard */
 window.addEventListener('keydown',e=>{const inInput=document.activeElement.tagName==='INPUT';
+  if((e.ctrlKey||e.metaKey)&&!inInput&&mode!=='wall'){const k=e.key.toLowerCase();
+    if(k==='z'&&!e.shiftKey){e.preventDefault();doUndo();return;}
+    if(k==='y'||(k==='z'&&e.shiftKey)){e.preventDefault();doRedo();return;}}
   if(mode==='measure'&&e.key==='Escape'){endMeasure();return;}
   if((mode==='gebouw'||mode==='perceel')&&e.key==='Escape'){setMode('idle');return;}
   if(mode==='wall'&&!inInput){
@@ -980,7 +1030,8 @@ window.addEventListener('keydown',e=>{const inInput=document.activeElement.tagNa
     if(e.key==='Escape'){typedLen='';finishWall();return;}
     return;}
   if((e.key==='Delete'||e.key==='Backspace')&&!inInput){
-    if(selLabel){delLabel(selLabel);}else if(selLink){delLink(selLink);}else if(selWall){delWall(selWall);}else if(sel){delCam(sel);}}
+    if(selLabel){delLabel(selLabel);}else if(selLink){delLink(selLink);}else if(selWall){delWall(selWall);}else if(sel){delCam(sel);}
+    else return;toast('Verwijderd — Ctrl+Z maakt het ongedaan');}
   if(e.key==='Escape'){if(mode==='link')endLink();$("plaatsMenu").classList.remove('show');}});
 
 /* ---------- paneel automatisch onder de (mogelijk meerregelige) werkbalk plaatsen ---------- */
@@ -994,11 +1045,13 @@ layoutPanel();
 
 /* ---------- init: URL hash > localStorage ---------- */
 buildMenu();
-(function init(){
-  const m=location.hash.match(/p=([^&]+)/);
-  if(m){const s=decodeState(m[1]);if(s){restore(s);refreshList();toast('Gedeeld plan geladen');return;}}
-  try{const ls=localStorage.getItem(LS);if(ls){restore(JSON.parse(ls));refreshList();return;}}catch{}
-  refreshList();toast('Zoek een adres of klik ‘Plaats’ om te starten');
+(async function init(){
+  let loaded=false;
+  if(/[zp]=/.test(location.hash)){const s=await decodeHash(location.hash);
+    if(s){restore(s);refreshList();toast('Gedeeld plan geladen');loaded=true;}}
+  if(!loaded){try{const ls=localStorage.getItem(LS);if(ls){restore(JSON.parse(ls));refreshList();loaded=true;}}catch{}}
+  if(!loaded){refreshList();toast('Zoek een adres of klik ‘Plaats’ om te starten');}
+  markSnap(); // nulpunt voor undo/redo
 })();
 </script>
 </body>
