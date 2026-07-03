@@ -839,3 +839,7 @@ buildMenu();
   if(!loaded){refreshList();toast('Zoek een adres of klik ‘Plaats’ om te starten');}
   markSnap(); // nulpunt voor undo/redo
 })();
+
+/* ---------- offline (PWA): app-shell cachen; kaarttegels vereisen wel netwerk ---------- */
+if('serviceWorker' in navigator&&location.protocol==='https:')
+  navigator.serviceWorker.register('sw.js').catch(()=>{});

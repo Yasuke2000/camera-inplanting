@@ -1,0 +1,14 @@
+{
+  "name": "Infra-inplanting · kaarttool",
+  "short_name": "Infra-plan",
+  "description": "Beveiligingscamera's en netwerk-infrastructuur inplannen op een echte luchtfoto: dekking, bekabeling, plattegrond en export.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "lang": "nl",
+  "background_color": "#11161a",
+  "theme_color": "#11161a",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
