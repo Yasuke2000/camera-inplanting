@@ -90,6 +90,15 @@ test('simplifyCollinear verwijdert bijna-rechte punten, behoudt echte hoeken', (
   assert.strictEqual(geo.simplifyCollinear([[0, 0], [0, 2], [2, 2]], false).length, 3);
 });
 
+test('index.html escapet gebruikerstekst in innerHTML (XSS-regressie)', () => {
+  const h = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  assert.ok(h.includes('const esc='), 'esc-helper aanwezig');
+  assert.ok(h.includes('const escAttr='), 'escAttr-helper aanwezig');
+  // labels/notities/tekstlabels mogen nooit rauw in een template-string naar innerHTML —
+  // plannen komen ook uit gedeelde #p=-links en json-bestanden (altijd via esc/escAttr)
+  assert.ok(!/\$\{(c\.label|c\.note|t\.text|a\.label|b\.label)\b/.test(h), 'gebruikerstekst alleen via esc/escAttr');
+});
+
 test('index.html laadt geo.js en heeft één inline-script (refactor-regressie)', () => {
   const h = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
   assert.ok(h.includes('<script src="geo.js"></script>'), 'geo.js wordt ingeladen');

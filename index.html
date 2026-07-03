@@ -217,6 +217,10 @@
 const $=id=>document.getElementById(id);
 const uid=()=>'n'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const fmtH=v=>(''+v).replace('.',',');
+/* alle gebruikers-/externe tekst (labels, notities, geocoder) gaat via esc/escAttr
+   naar innerHTML — plannen komen ook uit gedeelde links en json-bestanden */
+const esc=s=>(''+s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const escAttr=s=>esc(s).replace(/"/g,'&quot;');
 
 /* ---------- map + layers ---------- */
 const map=L.map('map',{zoomControl:true,maxZoom:22}).setView([51.1373,3.3185],18);
@@ -275,10 +279,10 @@ const counters={camera:1,switch:1,rack:1,entry:1,ap:1};
 function makeIcon(c){
   if(isCam(c)){const T=TYPES[c.type];const dome=c.type==='dome'&&c.fov>=360;
     return L.divIcon({className:'',iconSize:[24,24],iconAnchor:[12,12],
-      html:`<div class="cammk ${c.id===sel?'sel':''}" style="--col:${T.col}">${dome?'':`<span class="arr" style="transform:rotate(${c.dir}deg)"></span>`}<b>${c.label}</b></div>`});}
+      html:`<div class="cammk ${c.id===sel?'sel':''}" style="--col:${T.col}">${dome?'':`<span class="arr" style="transform:rotate(${c.dir}deg)"></span>`}<b>${esc(c.label)}</b></div>`});}
   const K=KINDS[c.kind];
   return L.divIcon({className:'',iconSize:[26,26],iconAnchor:[13,13],
-    html:`<div class="devmk ${c.id===sel?'sel':''}" style="--col:${K.col}">${K.icon}<span class="devlbl">${c.label}</span></div>`});
+    html:`<div class="devmk ${c.id===sel?'sel':''}" style="--col:${K.col}">${K.icon}<span class="devlbl">${esc(c.label)}</span></div>`});
 }
 function conePts(c){
   if(c.type==='dome'&&c.fov>=360)return null;
@@ -342,7 +346,7 @@ function selectLink(id){if(editingBoundary)stopBoundaryEdit();clearHandles();kil
 function renderLinkEditor(ed){const k=byLink(selLink);if(!k){ed.innerHTML='';return;}
   const a=byId(k.a),b=byId(k.b),d=(a&&b)?mDist([a.lat,a.lng],[b.lat,b.lng]):0;
   ed.innerHTML=`<div class="ed">
-    <div class="row"><label>Kabel</label><div style="font:700 13px var(--mono);color:var(--ink)">${a?a.label:'?'} — ${b?b.label:'?'} · ${d.toFixed(1)} m</div></div>
+    <div class="row"><label>Kabel</label><div style="font:700 13px var(--mono);color:var(--ink)">${a?esc(a.label):'?'} — ${b?esc(b.label):'?'} · ${d.toFixed(1)} m</div></div>
     <div class="row"><label>Type</label><div class="seg">
       ${Object.entries(CABLES).map(([key,v])=>`<button data-c="${key}" style="${(k.type||'utp')===key?'background:'+v.col+';border-color:'+v.col+';color:#04201d':''}">${v.name}</button>`).join('')}
     </div></div>
@@ -378,7 +382,7 @@ function selectLabel(id){if(editingBoundary)stopBoundaryEdit();clearHandles();ki
   setTimeout(()=>{const el=$("txtInput");if(el){el.focus();el.select();}},30);}
 function renderLabelEditor(ed){const t=labels.find(x=>x.id===selLabel);if(!t){ed.innerHTML='';return;}
   ed.innerHTML=`<div class="ed">
-    <div class="row"><label>Tekst / kamernaam</label><input type="text" id="txtInput" value="${(t.text||'').replace(/"/g,'&quot;')}" placeholder="bv. Serverruimte"></div>
+    <div class="row"><label>Tekst / kamernaam</label><input type="text" id="txtInput" value="${escAttr(t.text||'')}" placeholder="bv. Serverruimte"></div>
     <div class="edbtns"><button class="btn" id="txtDel" style="color:#ffb4ad">Verwijder</button></div></div>`;
   $("txtInput").oninput=e=>{t.text=e.target.value;t._m.setIcon(makeLabelIcon(t));scheduleSave();};
   $("txtDel").onclick=()=>delLabel(selLabel);}
@@ -421,7 +425,7 @@ function refreshList(){
       sub=`${TYPES[c.type].name} · ${dome?'360°':c.fov+'° '+compName(c.dir)} · ${c.range} m · h ${fmtH(c.h)} m`;}
     else{const n=linkCount(c.id);sub=`${KINDS[c.kind].name} · h ${fmtH(c.h)} m${n?' · '+n+' kabel'+(n>1?'s':''):''}`;}
     return `<div class="cam ${c.id===sel?'sel':''}" data-id="${c.id}"><span class="dot" style="background:${devCol(c)}">${devIcon(c)}</span>
-    <span class="meta"><b>${c.label}</b><span>${sub}</span></span></div>`;}).join('')+'</div>';
+    <span class="meta"><b>${esc(c.label)}</b><span>${sub}</span></span></div>`;}).join('')+'</div>';
   w.querySelectorAll('.cam').forEach(d=>d.onclick=()=>{select(d.dataset.id);const c=byId(d.dataset.id);map.panTo([c.lat,c.lng]);});
 }
 function syncEditor(valuesOnly){
@@ -434,7 +438,7 @@ function syncEditor(valuesOnly){
   if(isCam(c)){
     const dome=c.type==='dome'&&c.fov>=360;
     ed.innerHTML=`<div class="ed">
-      <div class="row"><label>Naam</label><input type="text" id="eLabel" value="${c.label}"></div>
+      <div class="row"><label>Naam</label><input type="text" id="eLabel" value="${escAttr(c.label)}"></div>
       <div class="row"><label>Type</label><div class="seg">
         ${Object.entries(TYPES).map(([k,v])=>`<button data-t="${k}" style="${c.type===k?'background:'+v.col+';border-color:'+v.col+';color:#fff':''}">${v.icon}${v.name}</button>`).join('')}
       </div></div>
@@ -443,7 +447,7 @@ function syncEditor(valuesOnly){
       <div class="row"><div class="slabel">Bereik<b id="vRange">${c.range} m</b></div><input type="range" id="eRange" min="3" max="150" value="${c.range}"></div>
       <div class="row" style="${dome?'display:none':''}"><div class="slabel">Richting<b id="vDir">${c.dir}° ${compName(c.dir)}</b></div><input type="range" id="eDir" min="0" max="359" value="${c.dir}"></div>
       <div class="row"><div class="slabel">Montagehoogte<b id="vH">${fmtH(c.h)} m</b></div><input type="range" id="eH" min="2" max="12" step="0.5" value="${c.h}"></div>
-      <div class="row"><label>Notitie</label><input type="text" id="eNote" value="${(c.note||'').replace(/"/g,'&quot;')}" placeholder="bv. zicht op poort"></div>
+      <div class="row"><label>Notitie</label><input type="text" id="eNote" value="${escAttr(c.note||'')}" placeholder="bv. zicht op poort"></div>
       <div class="edbtns"><button class="btn" id="eDup">Dupliceer</button><button class="btn" id="eDel" style="color:#ffb4ad">Verwijder</button></div>
     </div>`;
     ed.querySelectorAll('.seg button').forEach(b=>b.onclick=()=>{const k=b.dataset.t;c.type=k;
@@ -455,12 +459,12 @@ function syncEditor(valuesOnly){
     $("eH").oninput=e=>{c.h=+e.target.value;$("vH").textContent=fmtH(c.h)+' m';refreshList();scheduleSave();};
   }else{
     ed.innerHTML=`<div class="ed">
-      <div class="row"><label>Naam</label><input type="text" id="eLabel" value="${c.label}"></div>
+      <div class="row"><label>Naam</label><input type="text" id="eLabel" value="${escAttr(c.label)}"></div>
       <div class="row"><label>Soort</label><div class="seg">
         ${Object.entries(KINDS).map(([k,v])=>`<button data-k="${k}" style="${c.kind===k?'background:'+v.col+';border-color:'+v.col+';color:#fff':''}">${v.icon}${v.name.split(' ')[0]}</button>`).join('')}
       </div></div>
       <div class="row"><div class="slabel">Montagehoogte<b id="vH">${fmtH(c.h)} m</b></div><input type="range" id="eH" min="0" max="12" step="0.5" value="${c.h}"></div>
-      <div class="row"><label>Notitie</label><input type="text" id="eNote" value="${(c.note||'').replace(/"/g,'&quot;')}" placeholder="bv. 24-poort PoE · voeding hier · glasvezel"></div>
+      <div class="row"><label>Notitie</label><input type="text" id="eNote" value="${escAttr(c.note||'')}" placeholder="bv. 24-poort PoE · voeding hier · glasvezel"></div>
       <div class="row"><label>Verbindingen</label><div style="font:600 12px var(--mono);color:var(--mut)">${linkCount(c.id)} kabel(s) · klik <b style="color:var(--ink)">Verbind</b> om toe te voegen</div></div>
       <div class="edbtns"><button class="btn" id="eDup">Dupliceer</button><button class="btn" id="eDel" style="color:#ffb4ad">Verwijder</button></div>
     </div>`;
@@ -545,7 +549,7 @@ $("q").addEventListener('input',e=>{clearTimeout(stmr);const v=e.target.value.tr
   if(v.length<3){$("sugg").classList.remove('show');return;}
   stmr=setTimeout(async()=>{try{const d=await jsonp('https://geo.api.vlaanderen.be/geolocation/v4/Suggestion?q='+encodeURIComponent(v)+'&c=6');
     const arr=(d&&d.SuggestionResult)||[];const box=$("sugg");
-    box.innerHTML=arr.map(s=>`<div>${s}</div>`).join('');box.classList.toggle('show',arr.length>0);
+    box.innerHTML=arr.map(s=>`<div>${esc(s)}</div>`).join('');box.classList.toggle('show',arr.length>0);
     box.querySelectorAll('div').forEach(el=>el.onclick=()=>{$("q").value=el.textContent;$("sugg").classList.remove('show');geocode(el.textContent);});
   }catch{}},220);});
 $("q").addEventListener('keydown',e=>{if(e.key==='Enter'){$("sugg").classList.remove('show');geocode(e.target.value.trim());}});
@@ -835,7 +839,7 @@ $("csvBtn").onclick=()=>{
 
 /* ---------- SVG export (vectorplan voor documenten) ---------- */
 const innerOf=svg=>svg.replace(/^<svg[^>]*>/,'').replace(/<\/svg>\s*$/,'');
-const esc=s=>(''+s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+/* esc staat bovenaan bij de andere helpers */
 function exportSVG(){
   const allLL=[];
   walls.forEach(w=>w.pts.forEach(p=>allLL.push(p)));
@@ -925,7 +929,7 @@ function restore(s){if(!s)return;
   labels.forEach(t=>t._m&&map.removeLayer(t._m));labels=[];selLabel=null;
   walls.forEach(w=>w._l&&map.removeLayer(w._l));walls=[];selWall=null;curWall=null;
   Object.assign(counters,{camera:1,switch:1,rack:1,entry:1,ap:1},s.ct||(s.n?{camera:s.n}:{}));
-  (s.cams||[]).forEach(x=>{const kind=x.k||'camera';const c={id:uid(),kind,label:x.l,lat:x.la,lng:x.lo,h:x.h,note:x.no||''};
+  (s.cams||[]).forEach(x=>{const kind=x.k||'camera';const c={id:uid(),kind,label:x.l,lat:x.la,lng:x.lo,h:(x.h==null?defaultH(kind):x.h),note:x.no||''};
     if(kind==='camera')Object.assign(c,{type:x.t||'fixed',dir:x.d,fov:x.f,range:x.r});cams.push(c);});
   (s.lk||[]).forEach(([i,j],idx)=>{if(cams[i]&&cams[j])links.push({id:uid(),a:cams[i].id,b:cams[j].id,type:(s.lt&&s.lt[idx])||'utp'});});
   (s.tx||[]).forEach(x=>{labels.push({id:uid(),text:x.t,lat:x.la,lng:x.lo});});
