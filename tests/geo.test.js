@@ -90,11 +90,46 @@ test('simplifyCollinear verwijdert bijna-rechte punten, behoudt echte hoeken', (
   assert.strictEqual(geo.simplifyCollinear([[0, 0], [0, 2], [2, 2]], false).length, 3);
 });
 
-test('index.html laadt geo.js en heeft één inline-script (refactor-regressie)', () => {
+test('segsIntersect: kruisend, niet-kruisend, rakend', () => {
+  // kruisend
+  assert.strictEqual(geo.segsIntersect([0, 0], [2, 2], [0, 2], [2, 0]), true);
+  // evenwijdig, niet rakend
+  assert.strictEqual(geo.segsIntersect([0, 0], [2, 0], [0, 1], [2, 1]), false);
+  // los van elkaar
+  assert.strictEqual(geo.segsIntersect([0, 0], [1, 0], [2, 2], [3, 3]), false);
+  // eindpunt raakt segment (muurhoek blokkeert)
+  assert.strictEqual(geo.segsIntersect([0, 0], [2, 0], [1, 0], [1, 2]), true);
+  // gedeeld eindpunt
+  assert.strictEqual(geo.segsIntersect([0, 0], [1, 1], [1, 1], [2, 0]), true);
+  // collineair, overlappend
+  assert.strictEqual(geo.segsIntersect([0, 0], [2, 0], [1, 0], [3, 0]), true);
+  // collineair, los
+  assert.strictEqual(geo.segsIntersect([0, 0], [1, 0], [2, 0], [3, 0]), false);
+  // realistische lat/lng-schaal: muur tussen camera en punt
+  const cam = [51.13730, 3.31850], pt = geo.dest(cam[0], cam[1], 90, 30);
+  const w1 = geo.dest(cam[0], cam[1], 45, 15), w2 = geo.dest(cam[0], cam[1], 135, 15);
+  assert.strictEqual(geo.segsIntersect(cam, pt, w1, w2), true, 'muur blokkeert zichtlijn');
+  const w3 = geo.dest(cam[0], cam[1], 200, 5), w4 = geo.dest(cam[0], cam[1], 250, 5);
+  assert.strictEqual(geo.segsIntersect(cam, pt, w3, w4), false, 'muur achter camera blokkeert niet');
+});
+
+test('app.js escapet gebruikerstekst in innerHTML (XSS-regressie)', () => {
+  const a = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+  assert.ok(a.includes('const esc='), 'esc-helper aanwezig');
+  assert.ok(a.includes('const escAttr='), 'escAttr-helper aanwezig');
+  // labels/notities/tekstlabels mogen nooit rauw in een template-string naar innerHTML —
+  // plannen komen ook uit gedeelde #z=/#p=-links en json-bestanden (altijd via esc/escAttr)
+  assert.ok(!/\$\{(c\.label|c\.note|t\.text|a\.label|b\.label)\b/.test(a), 'gebruikerstekst alleen via esc/escAttr');
+});
+
+test('index.html laadt geo.js + app.js en heeft geen inline-script (refactor-regressie)', () => {
   const h = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const a = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
   assert.ok(h.includes('<script src="geo.js"></script>'), 'geo.js wordt ingeladen');
+  assert.ok(h.includes('<script src="app.js"></script>'), 'app.js wordt ingeladen');
+  assert.ok(h.indexOf('src="geo.js"') < h.indexOf('src="app.js"'), 'geo.js vóór app.js');
   const inline = [...h.matchAll(/<script>([\s\S]*?)<\/script>/g)];
-  assert.strictEqual(inline.length, 1, 'precies één inline-script');
-  assert.ok(!/function dest\(/.test(inline[0][1]), 'dest niet gedupliceerd in index.html');
-  assert.ok(!/function polygonAreaM2\(/.test(inline[0][1]), 'polygonAreaM2 niet gedupliceerd in index.html');
+  assert.strictEqual(inline.length, 0, 'geen inline-scripts meer');
+  assert.ok(!/function dest\(/.test(a), 'dest niet gedupliceerd in app.js');
+  assert.ok(!/function polygonAreaM2\(/.test(a), 'polygonAreaM2 niet gedupliceerd in app.js');
 });

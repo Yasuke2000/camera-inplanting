@@ -2,8 +2,8 @@
 
 Een volledig client-side web-app waarmee je beveiligingscamera's én netwerk-infrastructuur op een
 echte luchtfoto-kaart kan inplannen, de bekabeling kan tonen, de camera-dekking kan analyseren en
-het resultaat kan delen en exporteren. Geen backend, geen build-stap, geen API-sleutels — één
-`index.html`, klaar voor **GitHub Pages**.
+het resultaat kan delen en exporteren. Geen backend, geen build-stap, geen API-sleutels —
+`index.html` + `app.js` + `geo.js`, klaar voor **GitHub Pages**.
 
 ## Wat ze doet
 
@@ -45,14 +45,22 @@ het resultaat kan delen en exporteren. Geen backend, geen build-stap, geen API-s
   schaalbalk, noordpijl) als `.svg` — schaalbaar en bewerkbaar voor IT-documentatie (Inkscape, Visio,
   Word…). Voor een snelle kaart-met-luchtfoto blijft *PDF* (print) beschikbaar.
 - **Terrein tekenen** → **dekkingsanalyse** (camera's): blinde vlekken (rood), overlap ≥2 cam's
-  (groen), met percentages en geschatte oppervlakte.
+  (groen), met percentages en geschatte oppervlakte. **Muren blokkeren de zichtlijn**: wat achter
+  een getekende muur of GRB-gebouwcontour ligt telt als blinde vlek.
+- **Ongedaan maken**: **Ctrl+Z** / **Ctrl+Y** (of Ctrl+Shift+Z) over alle bewerkingen — toestellen,
+  kabels, muren, labels en terrein. Pannen/zoomen telt niet mee en de kaartpositie blijft staan.
 - **Legende** in/uitschakelen om aan anderen uit te leggen wat elk symbool betekent.
 - **Plan delen om samen te bewerken**: knop *Bewaar* schrijft het volledige plan naar een
   `infra-plan.json`-bestand. Iemand anders opent dat met *Open* (of sleept het op de kaart) en kan
   meteen verder bewerken — alle toestellen, muren, kabels, labels, terrein en kaartpositie zitten erin.
-- **Delen via link**: knop *Deel* kopieert een link met het volledige plan in de URL.
+- **Delen via link**: knop *Deel* kopieert een link met het volledige plan in de URL. Het plan
+  wordt gecomprimeerd (`#z=`, deflate) zodat ook grote plannen met GRB-contouren in een URL passen;
+  oude ongecomprimeerde `#p=`-links blijven werken.
 - **Exporteren**: CSV (toestel- + kabellijst voor de offerte), PDF via print, SVG-vectorplan.
 - Auto-opslaan in de browser (localStorage).
+- **Offline/PWA**: de app-shell wordt door een service worker gecachet — een bewaard plan opent ook
+  zonder netwerk (de kaarttegels zelf vereisen wel internet). Installeerbaar als app via het
+  webmanifest.
 
 ## Lokaal openen
 
@@ -60,8 +68,8 @@ Open `index.html` rechtstreeks in de browser. (De kaart heeft internet nodig voo
 
 ## Tests
 
-De pure reken-/geo-functies staan in `geo.js` (gedeeld door de app en de tests). Draaien met Node
-(geen dependencies):
+De app-logica staat in `app.js`; de pure reken-/geo-functies staan in `geo.js` (gedeeld door de
+app en de tests). Draaien met Node (geen dependencies):
 
 ```bash
 node --test
@@ -73,7 +81,7 @@ CI draait dezelfde tests bij elke push via GitHub Actions (`.github/workflows/te
 
 ```bash
 git init
-git add index.html README.md .nojekyll
+git add index.html app.js geo.js sw.js manifest.webmanifest icon.svg README.md .nojekyll
 git commit -m "Camera-inplanting kaarttool"
 git branch -M main
 git remote add origin https://github.com/Yasuke2000/camera-inplanting.git
@@ -90,8 +98,9 @@ DNS-provider een CNAME-record naar `yasuke2000.github.io`.
 
 ## Opmerkingen
 
-- De dekkingsanalyse is een 2D-rasterbenadering op grondniveau — ze houdt geen rekening met
-  obstakels/muren of montagehoogte-zichtlijnen. Goed om gaten en dubbele dekking te zien, niet voor
-  exacte lensberekeningen.
+- De dekkingsanalyse is een 2D-rasterbenadering op grondniveau. Getekende muren en
+  gebouwcontouren blokkeren de zichtlijn, maar montagehoogte (over een muur heen kijken) en
+  lens-details tellen niet mee. Goed om gaten en dubbele dekking te zien, niet voor exacte
+  lensberekeningen.
 - De Geopunt-adreszoeker en de Vlaanderen-lagen gelden voor Vlaanderen/Brussel; daarbuiten gebruik
   je de wereldwijde Esri-luchtfoto.

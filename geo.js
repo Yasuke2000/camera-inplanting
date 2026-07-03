@@ -40,6 +40,25 @@ function geoPolys(geom){return geom.type==='MultiPolygon'?geom.coordinates:[geom
 function geoContains(geom,lon,lat){for(const poly of geoPolys(geom)){if(ptInRing(lon,lat,poly[0])){
   let hole=false;for(let h=1;h<poly.length;h++)if(ptInRing(lon,lat,poly[h])){hole=true;break;}if(!hole)return true;}}return false;}
 
+/* Oriëntatie van c t.o.v. de lijn a→b: 1 = links, -1 = rechts, 0 = (bijna) collineair. */
+function orient(a,b,c){const v=(b[0]-a[0])*(c[1]-a[1])-(b[1]-a[1])*(c[0]-a[0]);
+  return v>1e-18?1:v<-1e-18?-1:0;}
+
+/* Snijden de segmenten a–b en c–d elkaar (randen/eindpunten tellen mee)?
+   Punten zijn [x,y]-paren; het resultaat is invariant onder as-schaling, dus
+   [lat,lng] rechtstreeks gebruiken is prima voor kleine gebieden. */
+function segsIntersect(a,b,c,d){
+  const o1=orient(a,b,c),o2=orient(a,b,d),o3=orient(c,d,a),o4=orient(c,d,b);
+  if(o1!==o2&&o3!==o4)return true;
+  const on=(p,q,r)=>Math.min(p[0],q[0])<=r[0]&&r[0]<=Math.max(p[0],q[0])
+    &&Math.min(p[1],q[1])<=r[1]&&r[1]<=Math.max(p[1],q[1]);
+  if(o1===0&&on(a,b,c))return true;
+  if(o2===0&&on(a,b,d))return true;
+  if(o3===0&&on(c,d,a))return true;
+  if(o4===0&&on(c,d,b))return true;
+  return false;
+}
+
 /* Voeg bijna-rechte (collineaire) opeenvolgende punten samen: een hoekpunt waar de
    richting <tolDeg° afwijkt van recht-door wordt weggelaten. pts = [[lat,lng],...].
    closed=true behandelt het als gesloten ring (bv. gebouw/perceel) en behoudt de sluitpunt. */
@@ -66,5 +85,5 @@ function simplifyCollinear(pts,closed,tolDeg){
 }
 
 if(typeof module!=='undefined'&&module.exports){
-  module.exports={R,D2R,R2D,dest,bearing,COMP,compName,angDiff,polygonAreaM2,pointInPoly,ptInRing,geoPolys,geoContains,simplifyCollinear};
+  module.exports={R,D2R,R2D,dest,bearing,COMP,compName,angDiff,polygonAreaM2,pointInPoly,ptInRing,geoPolys,geoContains,simplifyCollinear,segsIntersect};
 }
