@@ -28,6 +28,9 @@ const grb=L.tileLayer.wms('https://geo.api.vlaanderen.be/GRB-basiskaart/wms',
 [esri,ortho,osm,grb].forEach(retryTiles);
 
 esri.addTo(map);
+/* Vlaanderen 15cm standaard AAN: Esri is boven zoom 19 opgeschaald (wazig); de ortho is
+   transparant buiten Vlaanderen en bij mislukte tegels, dus wereldwijd veilig als default */
+ortho.addTo(map);
 const baseLayers={"Luchtfoto (wereld)":esri,"Kaart (OSM)":osm};
 const overlays={"Vlaanderen 15cm (scherper)":ortho,"GRB-kadaster (Vlaanderen)":grb};
 L.control.layers(baseLayers,overlays,{position:'bottomright'}).addTo(map);
@@ -784,11 +787,16 @@ function defaultName(){let n=1;const names=new Set(Object.values(store.sites).ma
   while(names.has('Plan '+n))n++;return 'Plan '+n;}
 function loadStore(){
   try{const raw=localStorage.getItem(LS_SITES);if(raw){const s=JSON.parse(raw);if(s&&s.sites&&s.active&&s.sites[s.active])store=s;}}catch{}
-  if(store)return;
-  // migratie: het oude enkelvoudige plan wordt "Plan 1"
-  let old=null;try{old=JSON.parse(localStorage.getItem(LS));}catch{}
-  const id=newSiteId();
-  store={active:id,sites:{[id]:{name:'Plan 1',updated:Date.now(),state:old||null}}};
+  if(!store){
+    // migratie: het oude enkelvoudige plan wordt "Plan 1"
+    let old=null;try{old=JSON.parse(localStorage.getItem(LS));}catch{}
+    const id=newSiteId();
+    store={active:id,sites:{[id]:{name:'Plan 1',updated:Date.now(),state:old||null}}};
+  }
+  // eenmalige reparatie: plannen die (per ongeluk) zonder de scherpe Vlaanderen-ortho
+  // bewaard werden weer scherp zetten — de ortho staat voortaan standaard aan
+  if(!store.orthoFix){store.orthoFix=1;
+    Object.values(store.sites).forEach(st=>{if(st.state&&st.state.ov)st.state.ov.o=true;});}
   persistStore();
 }
 /* kaartlagen die niet in state() zitten (meetlijnen, foto-overlay, analyse) opruimen bij plan-wissel */
