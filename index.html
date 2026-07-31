@@ -23,7 +23,8 @@
   .leaflet-container{background:#343a40}
 
   /* top bar */
-  .topbar{position:absolute;top:10px;left:10px;right:10px;z-index:1000;display:flex;gap:7px;align-items:flex-start;
+  /* boven het paneel (z 1000): de rechtse dropdown-menu's vallen eroverheen */
+  .topbar{position:absolute;top:10px;left:10px;right:10px;z-index:1150;display:flex;gap:7px;align-items:flex-start;
     pointer-events:none;flex-wrap:wrap}
   .topbar>*{pointer-events:auto}
   .brand{background:linear-gradient(180deg,#1a2127,#141a1f);border:1px solid var(--line);border-radius:10px;
@@ -55,6 +56,13 @@
   .menu div:last-child{border-bottom:none}.menu div:hover{background:var(--panel2)}
   .menu .mi{width:22px;height:22px;border-radius:6px;display:grid;place-items:center;flex:none;color:#fff}
   .menu .mi svg{width:13px;height:13px}
+  .menu.right{left:auto;right:0}
+  .menu.wide{min-width:250px}
+  .menu div>svg{width:15px;height:15px;flex:none}
+  .menu div.on{background:var(--panel2)}
+  .menu div small{margin-left:auto;color:var(--mut2);font:600 10px var(--mono);white-space:nowrap;padding-left:8px}
+  .menu div.danger{color:#ffb4ad}
+  #siteName{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
   /* side panel */
   .panel{position:absolute;top:62px;right:10px;width:312px;max-height:calc(100% - 84px);z-index:1000;
@@ -176,13 +184,20 @@
     <button class="btn" id="txtBtn" title="Plaats een tekst / kamernaam op het plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7V5h16v2M9 19h6M12 5v14"/></svg>Tekst</button>
     <button class="btn" id="boundBtn" title="Teken de terreingrens"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7l8-4 8 4-8 4-8-4z"/><path d="M4 7v10l8 4 8-4V7"/></svg>Terrein</button>
     <button class="btn" id="anaBtn" title="Dekkingsanalyse camera's: gaten rood, overlap groen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Analyse</button>
-    <button class="btn" id="csvBtn" title="Toestel- en kabellijst exporteren"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 17v-6M12 17v-2M15 17v-4"/><path d="M14 3H6a2 2 0 00-2 2v14a2 2 0 002 2h12a2 2 0 002-2V9z"/><path d="M14 3v6h6"/></svg>CSV</button>
-    <button class="btn" id="shareBtn" title="Deelbare link kopiëren"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>Deel</button>
     <button class="btn" id="upBtn" title="Eigen luchtfoto/drone-beeld over de kaart leggen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15l-5-5L5 21"/><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/></svg>Foto</button>
-    <button class="btn" id="svgBtn" title="Plattegrond als vector-SVG exporteren (voor documenten)">SVG</button>
-    <button class="btn" id="jsonBtn" title="Bewaar het volledige plan als bestand (.json) om te delen of te back-uppen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>Bewaar</button>
-    <button class="btn" id="openBtn" title="Open een .json-plan om verder te bewerken"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><path d="M12 11v6M9 14l3-3 3 3"/></svg>Open</button>
-    <button class="btn" id="printBtn" title="Print of bewaar als PDF">PDF</button>
+    <div class="menuwrap">
+      <button class="btn" id="siteBtn" title="Plannen: nieuw plan starten, wisselen tussen sites, bewaren of openen als bestand"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg><span id="siteName">Plan</span> ▾</button>
+      <div class="menu right wide" id="siteMenu"></div>
+    </div>
+    <div class="menuwrap">
+      <button class="btn" id="expBtn" title="Exporteren: CSV, SVG, PDF of deelbare link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><path d="M7 10l5 5 5-5M12 15V3"/></svg>Exporteer ▾</button>
+      <div class="menu right" id="exportMenu">
+        <div id="csvBtn" title="Toestel- en kabellijst als CSV"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 17v-6M12 17v-2M15 17v-4"/><path d="M14 3H6a2 2 0 00-2 2v14a2 2 0 002 2h12a2 2 0 002-2V9z"/><path d="M14 3v6h6"/></svg>CSV · toestel- en kabellijst</div>
+        <div id="svgBtn" title="Plattegrond als vector-SVG (voor documenten)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17l6-9 4 6 3-4 5 7"/><path d="M3 21h18"/></svg>SVG · vectorplan</div>
+        <div id="printBtn" title="Print of bewaar als PDF"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="7"/></svg>PDF · print</div>
+        <div id="shareBtn" title="Deelbare link kopiëren"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>Deelbare link kopiëren</div>
+      </div>
+    </div>
   </div>
 </div>
 

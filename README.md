@@ -41,23 +41,30 @@ het resultaat kan delen en exporteren. Geen backend, geen build-stap, geen API-s
   bestaande grens → sleep de hoekpunten om de afbakening manueel bij te regelen. Bij *Terrein* ook
   *Nieuw terrein* / *Wis terrein*.
 - **Meten** via *Meet*: klik twee punten voor de afstand in meter.
-- **SVG-export** via *SVG*: een proper vectorplan (muren, toestellen, labels, kabels, terrein,
-  schaalbalk, noordpijl) als `.svg` — schaalbaar en bewerkbaar voor IT-documentatie (Inkscape, Visio,
-  Word…). Voor een snelle kaart-met-luchtfoto blijft *PDF* (print) beschikbaar.
+- **SVG-export** via *Exporteer ▾ → SVG*: een proper vectorplan (muren, toestellen, labels, kabels,
+  terrein, schaalbalk, noordpijl) als `.svg` — schaalbaar en bewerkbaar voor IT-documentatie
+  (Inkscape, Visio, Word…). Voor een snelle kaart-met-luchtfoto blijft *PDF* (print) beschikbaar.
 - **Terrein tekenen** → **dekkingsanalyse** (camera's): blinde vlekken (rood), overlap ≥2 cam's
   (groen), met percentages en geschatte oppervlakte. **Muren blokkeren de zichtlijn**: wat achter
   een getekende muur of GRB-gebouwcontour ligt telt als blinde vlek.
 - **Ongedaan maken**: **Ctrl+Z** / **Ctrl+Y** (of Ctrl+Shift+Z) over alle bewerkingen — toestellen,
   kabels, muren, labels en terrein. Pannen/zoomen telt niet mee en de kaartpositie blijft staan.
 - **Legende** in/uitschakelen om aan anderen uit te leggen wat elk symbool betekent.
-- **Plan delen om samen te bewerken**: knop *Bewaar* schrijft het volledige plan naar een
-  `infra-plan.json`-bestand. Iemand anders opent dat met *Open* (of sleept het op de kaart) en kan
-  meteen verder bewerken — alle toestellen, muren, kabels, labels, terrein en kaartpositie zitten erin.
-- **Delen via link**: knop *Deel* kopieert een link met het volledige plan in de URL. Het plan
-  wordt gecomprimeerd (`#z=`, deflate) zodat ook grote plannen met GRB-contouren in een URL passen;
-  oude ongecomprimeerde `#p=`-links blijven werken.
-- **Exporteren**: CSV (toestel- + kabellijst voor de offerte), PDF via print, SVG-vectorplan.
-- Auto-opslaan in de browser (localStorage).
+- **Meerdere plannen (sites) naast elkaar** via het plan-menu (knop met de plannaam): *Nieuw plan*
+  start met een leeg blad zonder het vorige te verliezen, wissel met één klik tussen sites, hernoem
+  of verwijder een plan. Elk plan wordt apart auto-opgeslagen in de browser (localStorage); de oude
+  enkelvoudige opslag wordt automatisch gemigreerd naar "Plan 1". Undo/redo geldt per plan.
+- **Plan delen om samen te bewerken**: *Bewaar als bestand (.json)* in het plan-menu schrijft het
+  volledige plan naar `<plannaam>.json`. Iemand anders opent dat via *Open bestand…* (of sleept het
+  op de kaart) — het komt binnen als een **apart** plan, dus eigen werk wordt nooit overschreven.
+- **Delen via link**: *Exporteer ▾ → Deelbare link* kopieert een link met het volledige plan in de
+  URL. Het plan wordt gecomprimeerd (`#z=`, deflate) zodat ook grote plannen met GRB-contouren in
+  een URL passen; oude ongecomprimeerde `#p=`-links blijven werken. Bij de ontvanger wordt de link
+  ook als apart plan geïmporteerd.
+- **Exporteren** via *Exporteer ▾*: CSV (toestel- + kabellijst voor de offerte), PDF via print,
+  SVG-vectorplan, deelbare link.
+- Zoom- en kaartlagenknoppen staan rechtsonder, zodat ze nooit onder de werkbalk of het
+  toestellenpaneel vallen.
 - **Offline/PWA**: de app-shell wordt door een service worker gecachet — een bewaard plan opent ook
   zonder netwerk (de kaarttegels zelf vereisen wel internet). Installeerbaar als app via het
   webmanifest.

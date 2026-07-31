@@ -9,7 +9,9 @@ const esc=s=>(''+s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt
 const escAttr=s=>esc(s).replace(/"/g,'&quot;');
 
 /* ---------- map + layers ---------- */
-const map=L.map('map',{zoomControl:true,maxZoom:22}).setView([51.1373,3.3185],18);
+/* zoom- en lagenknop rechtsonder: bovenaan zitten de werkbalk en het toestellenpaneel */
+const map=L.map('map',{zoomControl:false,maxZoom:22}).setView([51.1373,3.3185],18);
+L.control.zoom({position:'bottomright'}).addTo(map);
 
 /* mislukte tegels (netwerk/no-data) automatisch herladen i.p.v. zwart laten */
 function retryTiles(layer){layer.on('tileerror',e=>{const t=e.tile;if(!t)return;const n=t._retry||0;if(n>=2)return;t._retry=n+1;
@@ -28,7 +30,7 @@ const grb=L.tileLayer.wms('https://geo.api.vlaanderen.be/GRB-basiskaart/wms',
 esri.addTo(map);
 const baseLayers={"Luchtfoto (wereld)":esri,"Kaart (OSM)":osm};
 const overlays={"Vlaanderen 15cm (scherper)":ortho,"GRB-kadaster (Vlaanderen)":grb};
-L.control.layers(baseLayers,overlays,{position:'topright'}).addTo(map);
+L.control.layers(baseLayers,overlays,{position:'bottomright'}).addTo(map);
 let activeBase='esri';
 map.on('baselayerchange',e=>{activeBase=e.name.includes('OSM')?'osm':'esri';scheduleSave();});
 map.on('overlayadd overlayremove',scheduleSave);
@@ -273,7 +275,13 @@ function buildMenu(){
 }
 function startAdd(kind){addKind=kind;$("linkBtn").classList.remove('active');linkA=null;setMode('add');
   toast('Klik op de kaart om '+(kind==='camera'?'een camera':KINDS[kind].name)+' te plaatsen');}
-$("plaatsBtn").onclick=e=>{e.stopPropagation();$("plaatsMenu").classList.toggle('show');};
+function closeMenus(){document.querySelectorAll('.menu.show').forEach(x=>x.classList.remove('show'));}
+function toggleMenu(id){const m=$(id),open=m.classList.contains('show');
+  closeMenus();if(!open)m.classList.add('show');}
+$("plaatsBtn").onclick=e=>{e.stopPropagation();toggleMenu('plaatsMenu');};
+$("expBtn").onclick=e=>{e.stopPropagation();toggleMenu('exportMenu');};
+$("exportMenu").addEventListener('click',closeMenus);
+$("siteBtn").onclick=e=>{e.stopPropagation();buildSiteMenu();toggleMenu('siteMenu');};
 
 /* ---------- modes ---------- */
 function setMode(m){
@@ -340,7 +348,7 @@ $("q").addEventListener('input',e=>{clearTimeout(stmr);const v=e.target.value.tr
   }catch{}},220);});
 $("q").addEventListener('keydown',e=>{if(e.key==='Enter'){$("sugg").classList.remove('show');geocode(e.target.value.trim());}});
 document.addEventListener('click',e=>{if(!e.target.closest('.search'))$("sugg").classList.remove('show');
-  if(!e.target.closest('.menuwrap'))$("plaatsMenu").classList.remove('show');});
+  if(!e.target.closest('.menuwrap'))closeMenus();});
 async function geocode(q){if(!q)return;try{const d=await jsonp('https://geo.api.vlaanderen.be/geolocation/v4/Location?q='+encodeURIComponent(q)+'&c=1');
   const r=d&&d.LocationResult&&d.LocationResult[0];if(r){map.setView([r.Location.Lat_WGS84,r.Location.Lon_WGS84],19);toast(r.FormattedAddress||q);}
   else toast('Adres niet gevonden');}catch{toast('Zoeken mislukt (netwerk?)');}}
@@ -713,9 +721,12 @@ function killBar(){const b=$("floatbar");if(b)b.remove();}
 /* ---------- toast ---------- */
 let ttmr;function toast(msg){const t=$("toast");t.textContent=msg;t.classList.add('show');clearTimeout(ttmr);ttmr=setTimeout(()=>t.classList.remove('show'),3200);}
 
-/* ---------- persistence + share ---------- */
-const LS='infraplan.kaarttool.v2';
-function state(){const c=map.getCenter();return{c:[+c.lat.toFixed(6),+c.lng.toFixed(6)],z:map.getZoom(),b:activeBase,ov:{o:map.hasLayer(ortho),g:map.hasLayer(grb)},ct:{...counters},
+/* ---------- persistence: meerdere plannen (sites) + share ---------- */
+const LS='infraplan.kaarttool.v2';             // oud formaat (1 plan) — enkel nog voor migratie
+const LS_SITES='infraplan.kaarttool.sites.v1'; // nieuw formaat: meerdere plannen naast elkaar
+let store=null;                                // {active:id, sites:{id:{name,updated,state}}}
+let booted=false;                              // pas na init mag er in de store geschreven worden
+function state(){const c=map.getCenter();return{c:[+c.lat.toFixed(6),+c.lng.toFixed(6)],z:map.getZoom(),b:activeBase,ov:{o:map.hasLayer(ortho),g:map.hasLayer(grb)},ct:{...counters},q:$("q").value.trim()||undefined,
   bnd:boundary.map(p=>[+p[0].toFixed(6),+p[1].toFixed(6)]),
   cams:cams.map(x=>({k:x.kind,l:x.label,la:+x.lat.toFixed(6),lo:+x.lng.toFixed(6),d:x.dir,f:x.fov,r:x.range,t:x.type,h:x.h,no:x.note||''})),
   lk:links.map(k=>[cams.findIndex(c=>c.id===k.a),cams.findIndex(c=>c.id===k.b)]).filter(p=>p[0]>=0&&p[1]>=0),
@@ -734,20 +745,22 @@ function restore(s,keepView){if(!s)return;
   (s.tx||[]).forEach(x=>{labels.push({id:uid(),text:x.t,lat:x.la,lng:x.lo});});
   (s.wl||[]).forEach(pts=>{if(pts&&pts.length>=2){const w={id:uid(),pts:pts.map(p=>[p[0],p[1]]),_dims:[],_l:L.polyline(pts,wallStyle(false)).addTo(map)};
     w._l.on('click',e=>{selectWall(w.id);L.DomEvent.stop(e);});walls.push(w);addWallDims(w);}});
-  if(!keepView){ // bij undo/redo blijven kaartpositie en lagen staan
+  if(!keepView){ // bij undo/redo blijven kaartpositie, lagen en zoekadres staan
     if(s.c)map.setView(s.c,s.z||18);
     if(s.b==='osm'){map.removeLayer(esri);osm.addTo(map);activeBase='osm';}
     if(s.ov){if(s.ov.o)ortho.addTo(map);else map.removeLayer(ortho);if(s.ov.g)grb.addTo(map);else map.removeLayer(grb);}
     else if(s.b==='ortho')ortho.addTo(map);  // back-compat: oude opslag had ortho als basislaag
+    $("q").value=s.q||'';
   }
   clearBoundary();if(s.bnd&&s.bnd.length>=3){boundary=s.bnd.map(p=>[p[0],p[1]]);drawBoundary();}
   parcelCapakey=s.pk||null;
   renderAll();syncEditor();}
 /* ---- undo/redo: snapshot bij elke structurele wijziging (pannen/zoomen telt niet mee) ---- */
-const VIEW_KEYS=['c','z','b','ov'];
+const VIEW_KEYS=['c','z','b','ov','q'];
 const coreOf=s=>{const o={...s};VIEW_KEYS.forEach(k=>delete o[k]);return JSON.stringify(o);};
 let undoStack=[],redoStack=[],lastSnap=null,lastCore=null;
-function persist(s){try{localStorage.setItem(LS,JSON.stringify(s));}catch{}}
+function persist(s){if(!booted)return;const st=store&&store.sites[store.active];if(!st)return;
+  st.state=s;st.updated=Date.now();persistStore();}
 function saveNow(){const s=state(),core=coreOf(s);
   if(lastSnap&&core!==lastCore){undoStack.push(lastSnap);if(undoStack.length>60)undoStack.shift();redoStack=[];}
   lastSnap=s;lastCore=core;persist(s);}
@@ -760,6 +773,88 @@ function doRedo(){saveNow();if(!redoStack.length){toast('Niets om opnieuw te doe
   undoStack.push(lastSnap);applySnap(redoStack.pop());toast('Opnieuw gedaan');}
 let savtmr;function scheduleSave(){clearTimeout(savtmr);savtmr=setTimeout(saveNow,400);if(analysisOn)scheduleAnalysis();}
 map.on('moveend zoomend',scheduleSave);
+
+/* ---- meerdere plannen (sites): opslag-store, wisselen, nieuw, hernoemen, verwijderen ---- */
+function persistStore(){try{localStorage.setItem(LS_SITES,JSON.stringify(store));}catch{}}
+function siteName(){const st=store&&store.sites[store.active];return st?st.name:'Plan';}
+const newSiteId=()=>'s'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+function uniqueName(base){const names=new Set(Object.values(store.sites).map(s=>s.name));
+  if(!names.has(base))return base;let n=2;while(names.has(base+' ('+n+')'))n++;return base+' ('+n+')';}
+function defaultName(){let n=1;const names=new Set(Object.values(store.sites).map(s=>s.name));
+  while(names.has('Plan '+n))n++;return 'Plan '+n;}
+function loadStore(){
+  try{const raw=localStorage.getItem(LS_SITES);if(raw){const s=JSON.parse(raw);if(s&&s.sites&&s.active&&s.sites[s.active])store=s;}}catch{}
+  if(store)return;
+  // migratie: het oude enkelvoudige plan wordt "Plan 1"
+  let old=null;try{old=JSON.parse(localStorage.getItem(LS));}catch{}
+  const id=newSiteId();
+  store={active:id,sites:{[id]:{name:'Plan 1',updated:Date.now(),state:old||null}}};
+  persistStore();
+}
+/* kaartlagen die niet in state() zitten (meetlijnen, foto-overlay, analyse) opruimen bij plan-wissel */
+function clearExtras(){
+  if(measureLayer)measureLayer.clearLayers();
+  if(imgOverlay){map.removeLayer(imgOverlay);imgOverlay=null;}
+  const ib=$("imgbar");if(ib)ib.remove();
+  if(analysisOn){analysisOn=false;$("anaBtn").classList.remove('active');
+    if(anaCanvas)anaCanvas.getContext('2d').clearRect(0,0,anaCanvas.width,anaCanvas.height);
+    $("statcard").classList.remove('show');}
+  killBar();setMode('idle');
+}
+/* na een plan-wissel is de undo-geschiedenis van het vorige plan niet meer geldig */
+function resetHistory(){undoStack=[];redoStack=[];markSnap();}
+function newPlan(){
+  clearTimeout(savtmr);clearExtras();saveNow();
+  const id=newSiteId();store.sites[id]={name:defaultName(),updated:Date.now(),state:null};
+  store.active=id;persistStore();
+  restore({});refreshList();resetHistory();renderSiteBtn();
+  toast('Nieuw plan gestart — zoek een adres en begin te plaatsen');
+}
+function switchSite(id){const st=store.sites[id];if(!st||id===store.active)return;
+  clearTimeout(savtmr);clearExtras();saveNow();
+  store.active=id;persistStore();
+  restore(st.state||{});refreshList();resetHistory();renderSiteBtn();
+  toast('Plan ‘'+st.name+'’ geladen');}
+function importAsNewSite(s,name){
+  clearTimeout(savtmr);clearExtras();saveNow();
+  const id=newSiteId();store.sites[id]={name:uniqueName(name||'Geopend plan'),updated:Date.now(),state:s};
+  store.active=id;persistStore();
+  restore(s);refreshList();resetHistory();renderSiteBtn();}
+function renamePlan(){const cur=siteName();const nm=prompt('Naam van dit plan:',cur);
+  if(!nm||!nm.trim()||nm.trim()===cur)return;
+  store.sites[store.active].name=uniqueName(nm.trim());persistStore();renderSiteBtn();}
+function deletePlan(){const st=store.sites[store.active];if(!st)return;
+  if(!confirm('Plan ‘'+st.name+'’ definitief verwijderen?'))return;
+  clearTimeout(savtmr);delete store.sites[store.active];
+  const rest=Object.keys(store.sites).sort((a,b)=>(store.sites[b].updated||0)-(store.sites[a].updated||0));
+  if(!rest.length){const id=newSiteId();store.sites[id]={name:'Plan 1',updated:Date.now(),state:null};rest.push(id);}
+  store.active=rest[0];persistStore();clearExtras();
+  const nx=store.sites[store.active];
+  restore(nx.state||{});refreshList();resetHistory();renderSiteBtn();
+  toast('Plan verwijderd — ‘'+nx.name+'’ geladen');}
+function renderSiteBtn(){const el=$("siteName");el.textContent=siteName();
+  el.parentElement.title='Plan: '+siteName()+' — klik voor nieuw plan, wisselen, bewaren of openen';}
+function fmtDate(ts){if(!ts)return'';return new Date(ts).toLocaleDateString('nl-BE',{day:'numeric',month:'short'});}
+function buildSiteMenu(){
+  const m=$("siteMenu");
+  const ids=Object.keys(store.sites).sort((a,b)=>(store.sites[b].updated||0)-(store.sites[a].updated||0));
+  const pin='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0116 0z"/><circle cx="12" cy="10" r="3"/></svg>';
+  m.innerHTML=
+    '<div data-act="new"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg><b>Nieuw plan</b></div>'
+    +ids.map(id=>{const st=store.sites[id];const on=id===store.active;
+      return `<div data-site="${id}" class="${on?'on':''}">${pin}${esc(st.name)}${on?' ✓':''}<small>${fmtDate(st.updated)}</small></div>`;}).join('')
+    +'<div data-act="rename"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3l4 4L8 20l-5 1 1-5z"/></svg>Hernoem dit plan…</div>'
+    +'<div data-act="delete" class="danger"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M6 6l1 14a2 2 0 002 2h6a2 2 0 002-2l1-14"/></svg>Verwijder dit plan…</div>'
+    +'<div data-act="save"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>Bewaar als bestand (.json)</div>'
+    +'<div data-act="open"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><path d="M12 11v6M9 14l3-3 3 3"/></svg>Open bestand (.json)…</div>';
+  m.querySelectorAll('div[data-site],div[data-act]').forEach(d=>d.onclick=()=>{closeMenus();
+    if(d.dataset.site)switchSite(d.dataset.site);
+    else if(d.dataset.act==='new')newPlan();
+    else if(d.dataset.act==='rename')renamePlan();
+    else if(d.dataset.act==='delete')deletePlan();
+    else if(d.dataset.act==='save')saveJsonFile();
+    else if(d.dataset.act==='open')$("fileJson").click();});
+}
 
 /* deellinks: gecomprimeerd (#z=, deflate + base64url — grote plannen passen zo in een
    URL) met fallback en back-compat voor oude ongecomprimeerde #p=-links */
@@ -780,18 +875,23 @@ async function decodeHash(h){
   m=h.match(/p=([^&]+)/);
   if(m){try{return JSON.parse(decodeURIComponent(escape(atob(m[1]))));}catch{return null;}}
   return null;}
+/* geen hash in de eigen URL zetten: bij het openen wordt een hash-plan als apart
+   plan geïmporteerd, dus een achtergebleven hash zou bij F5 een duplicaat maken */
 $("shareBtn").onclick=async()=>{const h=await encodeShare(),url=location.origin+location.pathname+'#'+h;
-  try{await navigator.clipboard.writeText(url);toast('Deelbare link gekopieerd ✓');}catch{prompt('Kopieer deze link:',url);}
-  history.replaceState(null,'','#'+h);};
+  try{await navigator.clipboard.writeText(url);toast('Deelbare link gekopieerd ✓');}catch{prompt('Kopieer deze link:',url);}};
 
-/* JSON export (click) / import (dubbelklik of sleep bestand op de kaart) */
-$("jsonBtn").onclick=()=>{const a=document.createElement('a');
+/* JSON export / import (via het plan-menu of sleep een bestand op de kaart) */
+function saveJsonFile(){clearTimeout(savtmr);saveNow();
+  const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([JSON.stringify(state(),null,2)],{type:'application/json'}));
-  a.download='infra-plan.json';a.click();toast('Plan bewaard als infra-plan.json — deel dit bestand; de ander opent het met ‘Open’');};
-$("openBtn").onclick=()=>$("fileJson").click();
-$("jsonBtn").ondblclick=()=>$("fileJson").click();
+  const fn=siteName().replace(/[\\/:*?"<>|]+/g,'').trim()||'infra-plan';
+  a.download=fn+'.json';a.click();
+  toast('Plan bewaard als '+fn+'.json — deel dit bestand; de ander opent het via het plan-menu');}
 $("fileJson").onchange=e=>{const f=e.target.files[0];if(f)readJson(f);e.target.value='';};
-function readJson(f){const rd=new FileReader();rd.onload=()=>{const s=decodeJSON(rd.result);if(s){restore(s);refreshList();toast('Plan geopend ✓ — je kan verder bewerken');}else toast('Ongeldig planbestand');};rd.readAsText(f);}
+function readJson(f){const rd=new FileReader();rd.onload=()=>{const s=decodeJSON(rd.result);
+  if(s){importAsNewSite(s,((f.name||'').replace(/\.json$/i,'').trim())||'Geopend plan');
+    toast('Plan geopend als apart plan ✓ — je andere plannen blijven bewaard');}
+  else toast('Ongeldig planbestand');};rd.readAsText(f);}
 function decodeJSON(t){try{return JSON.parse(t);}catch{return null;}}
 window.addEventListener('dragover',e=>e.preventDefault());
 window.addEventListener('drop',e=>{e.preventDefault();const f=e.dataTransfer.files[0];if(!f)return;
@@ -818,7 +918,7 @@ window.addEventListener('keydown',e=>{const inInput=document.activeElement.tagNa
   if((e.key==='Delete'||e.key==='Backspace')&&!inInput){
     if(selLabel){delLabel(selLabel);}else if(selLink){delLink(selLink);}else if(selWall){delWall(selWall);}else if(sel){delCam(sel);}
     else return;toast('Verwijderd — Ctrl+Z maakt het ongedaan');}
-  if(e.key==='Escape'){if(mode==='link')endLink();$("plaatsMenu").classList.remove('show');}});
+  if(e.key==='Escape'){if(mode==='link')endLink();closeMenus();}});
 
 /* ---------- paneel automatisch onder de (mogelijk meerregelige) werkbalk plaatsen ---------- */
 function layoutPanel(){const tb=document.querySelector('.topbar'),pn=document.querySelector('.panel');if(!tb||!pn)return;
@@ -829,15 +929,20 @@ window.addEventListener('resize',layoutPanel);
 if(window.ResizeObserver)new ResizeObserver(layoutPanel).observe(document.querySelector('.topbar'));
 layoutPanel();
 
-/* ---------- init: URL hash > localStorage ---------- */
+/* ---------- init: URL hash (als apart plan) > opgeslagen plannen ---------- */
 buildMenu();
 (async function init(){
-  let loaded=false;
-  if(/[zp]=/.test(location.hash)){const s=await decodeHash(location.hash);
-    if(s){restore(s);refreshList();toast('Gedeeld plan geladen');loaded=true;}}
-  if(!loaded){try{const ls=localStorage.getItem(LS);if(ls){restore(JSON.parse(ls));refreshList();loaded=true;}}catch{}}
-  if(!loaded){refreshList();toast('Zoek een adres of klik ‘Plaats’ om te starten');}
+  loadStore();
+  if(/[zp]=/.test(location.hash)){
+    const s=await decodeHash(location.hash);
+    history.replaceState(null,'',location.pathname+location.search);
+    if(s){importAsNewSite(s,'Gedeeld plan');booted=true;renderSiteBtn();
+      toast('Gedeeld plan geladen als apart plan');return;}}
+  const st=store.sites[store.active];
+  if(st&&st.state){restore(st.state);refreshList();}
+  else{refreshList();toast('Zoek een adres of klik ‘Plaats’ om te starten');}
   markSnap(); // nulpunt voor undo/redo
+  booted=true;renderSiteBtn();
 })();
 
 /* ---------- offline (PWA): app-shell cachen; kaarttegels vereisen wel netwerk ---------- */
