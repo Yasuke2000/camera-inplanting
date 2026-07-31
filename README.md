@@ -30,6 +30,9 @@ het resultaat kan delen en exporteren. Geen backend, geen build-stap, geen API-s
   hoekpunten. Tijdens het tekenen zie je de **lengte live**; **typ een getal + Enter** om een muur
   een exacte lengte te geven in de richting van de muis. **Dubbelklik** = aparte muur, **Enter** =
   klaar, **⌫** = laatste punt ongedaan. Maatlabels per segment staan op het plan (toggle *Maten tonen*).
+  **Contour sluiten**: klik op je beginpunt (of knop *Sluit rond*) — pas dan telt de oppervlakte;
+  een geselecteerde open contour toont *niet gesloten* met een *Sluit rond*-knop om de opening te
+  dichten zonder te hertekenen.
 - **Gebouw automatisch omranden** via *Gebouw*: klik op een gebouw → de exacte **GRB-omtrek**
   (Digitaal Vlaanderen, kadastraal) wordt als bemate contour getekend, met melding van het **type en
   de oppervlakte (m²)**. Enkel Vlaanderen. Selecteer een contour om **omtrek + ingesloten

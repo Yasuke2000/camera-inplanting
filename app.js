@@ -383,8 +383,13 @@ function clearHandles(){editHandles.forEach(m=>map.removeLayer(m));editHandles=[
 function vtxMarker(latlng,onDrag,onEnd){const h=L.marker(latlng,{draggable:true,keyboard:false,
   icon:L.divIcon({className:'',iconSize:[14,14],iconAnchor:[7,7],html:'<div class="vtx"></div>'}),zIndexOffset:1200}).addTo(map);
   h.on('drag',()=>onDrag(h.getLatLng()));if(onEnd)h.on('dragend',onEnd);editHandles.push(h);}
-function showWallHandles(w){clearHandles();w.pts.forEach((p,i)=>vtxMarker(p,
-  ll=>{w.pts[i]=[ll.lat,ll.lng];w._l.setLatLngs(w.pts);},()=>{addWallDims(w);scheduleSave();}));}
+function showWallHandles(w){clearHandles();const closed=isClosedWall(w);
+  // bij een gesloten contour is het laatste punt een kopie van het eerste:
+  // geen eigen handle, en het eerste punt slepen verplaatst beide
+  const n=closed?w.pts.length-1:w.pts.length;
+  for(let i=0;i<n;i++)vtxMarker(w.pts[i],
+    ll=>{w.pts[i]=[ll.lat,ll.lng];if(closed&&i===0)w.pts[w.pts.length-1]=[ll.lat,ll.lng];w._l.setLatLngs(w.pts);},
+    ()=>{addWallDims(w);scheduleSave();});}
 function boundaryInfo(){return 'Terrein ±'+m2(polygonAreaM2(boundary))+(parcelCapakey?' · '+parcelCapakey:'');}
 function startBoundaryEdit(){editingBoundary=true;$("boundBtn").classList.add('active');sel=null;selLink=null;selWall=null;syncEditor();clearHandles();
   boundary.forEach((p,i)=>vtxMarker(p,ll=>{boundary[i]=[ll.lat,ll.lng];bLayer.setLatLngs(boundary);},()=>{scheduleSave();if(analysisOn)scheduleAnalysis();}));
@@ -448,16 +453,26 @@ function startWall(){setMode('wall');$("wallBtn").classList.add('active');map.do
   curWall={id:uid(),pts:[],_dims:[],_l:L.polyline([],wallStyle(false)).addTo(map)};
   if(!wallPreview)wallPreview=L.polyline([],{color:'#ffb020',weight:2,dashArray:'4 5',opacity:.9}).addTo(map);
   floatBar('Klik punten · haakse hoeken auto (Shift = vrij) · typ getal voor exacte lengte · ',
-    [['Nieuwe muur',newWallRun],['Ongedaan',undoWallPoint],['Klaar',finishWall]]);
-  toast('Klik om muren te tekenen. Typ een getal + Enter voor een exacte lengte · dubbelklik = aparte muur');}
+    [['Nieuwe muur',newWallRun],['Sluit rond',closeWallRun],['Ongedaan',undoWallPoint],['Klaar',finishWall]]);
+  toast('Klik om muren te tekenen · klik je beginpunt of ‘Sluit rond’ om een contour te sluiten');}
 function onWallMove(e){if(mode!=='wall'||!curWall||!curWall.pts.length||!wallPreview)return;
   const sp=snapPoint(e.latlng,e.originalEvent.shiftKey);wallTarget=[sp.lat,sp.lng];
   wallPreview.setLatLngs([curWall.pts[curWall.pts.length-1],wallTarget]);wallStatus();}
 map.on('mousemove',onWallMove);
+const sameP=(a,b)=>Math.abs(a[0]-b[0])<1e-9&&Math.abs(a[1]-b[1])<1e-9;
+const isClosedWall=w=>w.pts.length>=4&&sameP(w.pts[0],w.pts[w.pts.length-1]);
 function addWallPoint(ll,shift){if(!curWall)return;const sp=snapPoint(ll,shift);
   const p=[sp.lat,sp.lng],last=curWall.pts[curWall.pts.length-1];
-  if(last&&Math.abs(last[0]-p[0])<1e-9&&Math.abs(last[1]-p[1])<1e-9)return;
+  if(last&&sameP(last,p))return;
+  // klik op het beginpunt (vanaf 3 punten) = contour sluiten
+  if(curWall.pts.length>=3&&sameP(curWall.pts[0],p)){
+    curWall.pts.push(p);curWall._l.setLatLngs(curWall.pts);newWallRun();
+    toast('Contour gesloten ✓ — klik voor een nieuwe muur of kies Klaar');return;}
   curWall.pts.push(p);curWall._l.setLatLngs(curWall.pts);wallStatus();}
+function closeWallRun(){if(!curWall||curWall.pts.length<3){toast('Minstens 3 punten nodig om te sluiten');return;}
+  if(!sameP(curWall.pts[0],curWall.pts[curWall.pts.length-1]))curWall.pts.push([curWall.pts[0][0],curWall.pts[0][1]]);
+  curWall._l.setLatLngs(curWall.pts);newWallRun();
+  toast('Contour gesloten ✓ — klik voor een nieuwe muur of kies Klaar');}
 function addWallByLength(len){if(!curWall||!curWall.pts.length||!(len>0))return false;
   const last=curWall.pts[curWall.pts.length-1];const br=wallTarget?bearing(L.latLng(last[0],last[1]),L.latLng(wallTarget[0],wallTarget[1])):0;
   const np=dest(last[0],last[1],br,len);curWall.pts.push([np[0],np[1]]);curWall._l.setLatLngs(curWall.pts);wallStatus();return true;}
@@ -473,8 +488,14 @@ function selectWall(id){if(editingBoundary)stopBoundaryEdit();selWall=id;sel=nul
   walls.forEach(w=>w._l.setStyle(wallStyle(w.id===selWall)));
   const w=walls.find(x=>x.id===id),mt=w?wallMetrics(w):{per:0,area:0};
   if(w)showWallHandles(w);
-  floatBar('Omtrek '+mt.per.toFixed(1)+' m'+(w&&w.pts.length>=3?' · vlak ≈ '+m2(mt.area):'')+' · sleep punten · ',
-    [['Verwijder',()=>{delWall(id);killBar();}],['Sluit',()=>{selWall=null;clearHandles();walls.forEach(w=>w._l.setStyle(wallStyle(false)));killBar();}]]);}
+  const closed=w&&isClosedWall(w);
+  const btns=[];
+  if(w&&!closed&&w.pts.length>=3)btns.push(['Sluit rond',()=>{
+    w.pts.push([w.pts[0][0],w.pts[0][1]]);w._l.setLatLngs(w.pts);
+    addWallDims(w);scheduleSave();selectWall(id);toast('Contour gesloten ✓');}]);
+  btns.push(['Verwijder',()=>{delWall(id);killBar();}],
+    ['Klaar',()=>{selWall=null;clearHandles();walls.forEach(w=>w._l.setStyle(wallStyle(false)));killBar();}]);
+  floatBar('Omtrek '+mt.per.toFixed(1)+' m'+(closed?' · vlak ≈ '+m2(mt.area):(w&&w.pts.length>=3?' · niet gesloten':''))+' · sleep punten · ',btns);}
 function delWall(id){clearHandles();const w=walls.find(x=>x.id===id);if(w){clearWallDims(w);if(w._l)map.removeLayer(w._l);}walls=walls.filter(x=>x.id!==id);if(selWall===id)selWall=null;updateLegend();scheduleSave();}
 
 /* ---------- measure tool (meetlat) ---------- */
