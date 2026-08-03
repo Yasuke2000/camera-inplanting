@@ -4,7 +4,7 @@
      deploy is dus meteen zichtbaar;
    - overige shell-bestanden (app.js, geo.js, Leaflet): cache eerst + verversen op
      de achtergrond. */
-const CACHE = 'infraplan-v4';
+const CACHE = 'infraplan-v5';
 const SHELL = [
   './', './index.html', './app.js', './geo.js', './manifest.webmanifest', './icon.svg',
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',

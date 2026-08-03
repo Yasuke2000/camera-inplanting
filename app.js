@@ -513,24 +513,47 @@ function addMeasurePoint(ll){measurePts.push([ll.lat,ll.lng]);
     L.marker(mid,{interactive:false,keyboard:false,icon:L.divIcon({className:'',iconSize:[70,16],iconAnchor:[35,8],html:`<div class="dimlbl big">${d.toFixed(2)} m</div>`})}).addTo(measureLayer);
     measurePts=[];}}
 
+/* ---------- GRB-opvraging (gedeeld door gebouw & perceel) ----------
+   De GRB-dienst antwoordt soms pas na 15-25 s; zonder zichtbare voortgang en
+   time-out lijkt de knop dan kapot. Daarom: blijvende balk met teller,
+   Annuleer-knop, 45 s time-out en maar één aanvraag tegelijk. */
+const GRB_WFS='https://geo.api.vlaanderen.be/GRB/wfs?service=WFS&version=2.0.0&request=GetFeature&count=40&outputFormat=application/json&srsName=EPSG:4326';
+let grbCtl=null;
+async function grbFeatures(typeName,ll,d,busyLabel){
+  if(grbCtl){toast('Nog bezig met de vorige GRB-aanvraag — even geduld…');return null;}
+  const bbox=[(ll.lat-d).toFixed(7),(ll.lng-d).toFixed(7),(ll.lat+d).toFixed(7),(ll.lng+d).toFixed(7),'urn:ogc:def:crs:EPSG::4326'].join(',');
+  const ctl=new AbortController();grbCtl=ctl;let cancelled=false;
+  floatBar(busyLabel+'… ',[['Annuleer',()=>{cancelled=true;ctl.abort();}]]);
+  const t0=Date.now(),tick=setInterval(()=>{const el=document.querySelector('#floatbar .t');
+    if(el)el.textContent=busyLabel+' — al '+Math.round((Date.now()-t0)/1000)+' s, de GRB-dienst kan traag zijn… ';},1000);
+  const timer=setTimeout(()=>ctl.abort(),45000);
+  try{
+    const r=await fetch(GRB_WFS+'&typeNames='+typeName+'&bbox='+encodeURIComponent(bbox),{signal:ctl.signal});
+    if(!r.ok){toast('GRB-dienst gaf een fout ('+r.status+') — probeer het straks opnieuw');return null;}
+    const j=await r.json();
+    return (j.features||[]).filter(f=>f.geometry);
+  }catch(err){
+    toast(cancelled?'Geannuleerd':ctl.signal.aborted
+      ?'GRB antwoordde niet binnen 45 s — de dienst is overbelast, probeer het straks opnieuw'
+      :'Ophalen mislukt (netwerk?)');
+    return null;
+  }finally{clearTimeout(timer);clearInterval(tick);grbCtl=null;
+    const el=document.querySelector('#floatbar .t');if(el&&el.textContent.startsWith(busyLabel))killBar();}
+}
+
 /* ---------- auto-outline gebouw (GRB Vlaanderen) ---------- */
-const GRB_WFS='https://geo.api.vlaanderen.be/GRB/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=GRB:GBG&count=40&outputFormat=application/json&srsName=EPSG:4326&bbox=';
 $("bldgBtn").onclick=()=>{ if(mode==='gebouw'){setMode('idle');return;} setMode('gebouw');$("bldgBtn").classList.add('active');
   toast('Klik op een gebouw — de exacte GRB-omtrek wordt opgehaald (enkel Vlaanderen)'); };
 /* ptInRing, geoPolys, geoContains staan in geo.js */
 function ringCentroid(ring){let x=0,y=0;ring.forEach(p=>{x+=p[0];y+=p[1];});return [x/ring.length,y/ring.length];}
 async function fetchBuilding(ll){
   setMode('idle');$("bldgBtn").classList.remove('active');
-  const d=0.0008,bbox=[ (ll.lat-d).toFixed(7),(ll.lng-d).toFixed(7),(ll.lat+d).toFixed(7),(ll.lng+d).toFixed(7),'urn:ogc:def:crs:EPSG::4326'].join(',');
-  toast('Gebouw ophalen…');
-  try{
-    const r=await fetch(GRB_WFS+encodeURIComponent(bbox));const j=await r.json();
-    const feats=(j.features||[]).filter(f=>f.geometry);
-    if(!feats.length){toast('Geen gebouw gevonden hier (GRB = enkel Vlaanderen)');return;}
-    let chosen=feats.find(f=>geoContains(f.geometry,ll.lng,ll.lat));
-    if(!chosen){let bd=1e18;feats.forEach(f=>{const c=ringCentroid(geoPolys(f.geometry)[0][0]);const dd=(c[0]-ll.lng)**2+(c[1]-ll.lat)**2;if(dd<bd){bd=dd;chosen=f;}});}
-    addBuilding(chosen);
-  }catch(err){toast('Ophalen mislukt (netwerk?)');}
+  const feats=await grbFeatures('GRB:GBG',ll,0.0008,'Gebouw ophalen');
+  if(!feats)return;
+  if(!feats.length){toast('Geen gebouw gevonden hier (GRB = enkel Vlaanderen)');return;}
+  let chosen=feats.find(f=>geoContains(f.geometry,ll.lng,ll.lat));
+  if(!chosen){let bd=1e18;feats.forEach(f=>{const c=ringCentroid(geoPolys(f.geometry)[0][0]);const dd=(c[0]-ll.lng)**2+(c[1]-ll.lat)**2;if(dd<bd){bd=dd;chosen=f;}});}
+  addBuilding(chosen);
 }
 function addBuilding(f){
   let area=0,first=null;
@@ -549,16 +572,12 @@ $("parcelBtn").onclick=()=>{ if(mode==='perceel'){setMode('idle');return;} setMo
   toast('Klik op een perceel — de GRB-kadastergrens wordt als terrein gezet (enkel Vlaanderen)'); };
 async function fetchParcel(ll){
   setMode('idle');$("parcelBtn").classList.remove('active');
-  const d=0.0011,bbox=[(ll.lat-d).toFixed(7),(ll.lng-d).toFixed(7),(ll.lat+d).toFixed(7),(ll.lng+d).toFixed(7),'urn:ogc:def:crs:EPSG::4326'].join(',');
-  toast('Perceel ophalen…');
-  try{
-    const r=await fetch('https://geo.api.vlaanderen.be/GRB/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=GRB:ADP&count=40&outputFormat=application/json&srsName=EPSG:4326&bbox='+encodeURIComponent(bbox));
-    const j=await r.json();const feats=(j.features||[]).filter(f=>f.geometry);
-    if(!feats.length){toast('Geen perceel gevonden hier (GRB = enkel Vlaanderen)');return;}
-    let chosen=feats.find(f=>geoContains(f.geometry,ll.lng,ll.lat));
-    if(!chosen){let bd=1e18;feats.forEach(f=>{const c=ringCentroid(geoPolys(f.geometry)[0][0]);const dd=(c[0]-ll.lng)**2+(c[1]-ll.lat)**2;if(dd<bd){bd=dd;chosen=f;}});}
-    setParcelTerrein(chosen);
-  }catch(err){toast('Ophalen mislukt (netwerk?)');}
+  const feats=await grbFeatures('GRB:ADP',ll,0.0011,'Perceel ophalen');
+  if(!feats)return;
+  if(!feats.length){toast('Geen perceel gevonden hier (GRB = enkel Vlaanderen)');return;}
+  let chosen=feats.find(f=>geoContains(f.geometry,ll.lng,ll.lat));
+  if(!chosen){let bd=1e18;feats.forEach(f=>{const c=ringCentroid(geoPolys(f.geometry)[0][0]);const dd=(c[0]-ll.lng)**2+(c[1]-ll.lat)**2;if(dd<bd){bd=dd;chosen=f;}});}
+  setParcelTerrein(chosen);
 }
 function setParcelTerrein(f){
   const ring=geoPolys(f.geometry)[0][0];let pts=simplifyCollinear(ring.map(([lo,la])=>[la,lo]),true);
